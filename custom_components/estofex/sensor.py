@@ -34,6 +34,8 @@ async def async_setup_entry(
             EstofexValidUntilSensor(coordinator),
             EstofexForecastNumberSensor(coordinator),
             EstofexMapUrlSensor(coordinator),
+            EstofexLocalLevelSensor(coordinator),
+            EstofexLocalSummarySensor(coordinator),
             EstofexDiscussionSensor(coordinator),
             EstofexSummaryNlSensor(coordinator),
             EstofexDiscussionNlSensor(coordinator),
@@ -151,13 +153,73 @@ class EstofexDiscussionSensor(EstofexEntity, SensorEntity):
         return {
             "original_text": data.discussion_original,
             "level_texts": list(data.level_texts),
-            "title": data.title,
             "forecaster": data.forecaster,
             "issued_at": _format_timestamp(data.issued_at),
             "valid_from": _format_timestamp(data.valid_from),
             "valid_until": _format_timestamp(data.valid_until),
             "forecast_number": data.forecast_number,
             "forecast_id": data.forecast_id,
+        }
+
+
+class EstofexLocalLevelSensor(EstofexEntity, SensorEntity):
+    """Highest ESTOFEX warning level for the configured Home Assistant location."""
+
+    _attr_name = "Local Level"
+    _attr_unique_id = "estofex_local_level"
+    _attr_icon = "mdi:alert"
+
+    @property
+    def native_value(self) -> str:
+        """Return the highest local warning level."""
+        data = self.coordinator.data
+        if not data or not data.id:
+            return "None"
+        return data.local_level or "None"
+
+    @property
+    def extra_state_attributes(self):
+        """Return local level context."""
+        data = self.coordinator.data
+        if not data:
+            return {}
+        return {
+            "forecast_id": data.id,
+            "highest_forecast_level": data.highest_level,
+            "local_warning": data.local_warning.active,
+            "hazards": data.local_warning.hazard_labels,
+            "issued_at": _format_timestamp(data.issued_at),
+            "valid_until": _format_timestamp(data.valid_until),
+        }
+
+
+class EstofexLocalSummarySensor(EstofexEntity, SensorEntity):
+    """Concise local ESTOFEX forecast summary."""
+
+    _attr_name = "Local Summary"
+    _attr_unique_id = "estofex_local_summary"
+    _attr_icon = "mdi:text-box-search-outline"
+
+    @property
+    def native_value(self) -> str:
+        """Return a concise local forecast summary."""
+        data = self.coordinator.data
+        if not data or not data.id:
+            return "No forecast"
+        return data.local_summary()
+
+    @property
+    def extra_state_attributes(self):
+        """Return local summary context."""
+        data = self.coordinator.data
+        if not data:
+            return {}
+        return {
+            "forecast_id": data.id,
+            "level": data.local_level,
+            "hazards": data.local_warning.hazard_labels,
+            "valid_until": _format_timestamp(data.valid_until),
+            "summary_nl_available": bool(data.summary_nl),
         }
 
 
@@ -344,4 +406,17 @@ class EstofexStatusSensor(EstofexEntity, SensorEntity):
             "list_http_status": self.coordinator.last_list_http_status,
             "forecast_http_status": self.coordinator.last_forecast_http_status,
             "image_http_status": self.coordinator.last_image_http_status,
+            "forecast_age_seconds": (
+                self.coordinator.data.diagnostics.forecast_age_seconds
+                if self.coordinator.data
+                else None
+            ),
+            "last_update_duration": self.coordinator.last_update_duration,
+            "last_download_size": self.coordinator.last_download_size,
+            "parser_version": (
+                self.coordinator.data.diagnostics.parser_version
+                if self.coordinator.data
+                else None
+            ),
+            "forecast_source_url": self.coordinator.forecast_source_url,
         }

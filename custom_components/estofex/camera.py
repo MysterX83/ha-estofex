@@ -41,6 +41,26 @@ class EstofexMapCamera(EstofexEntity, Camera):
         """Return whether the camera has a forecast map to expose."""
         return super().available and self.coordinator.has_forecast_map
 
+    @property
+    def extra_state_attributes(self):
+        """Return forecast context for the camera image."""
+        data = self.coordinator.data
+        if not data:
+            return {}
+        return {
+            "forecast_id": data.id,
+            "issued": data.issued_at.isoformat() if data.issued_at else None,
+            "valid": {
+                "from": data.valid_from.isoformat() if data.valid_from else None,
+                "until": data.valid_until.isoformat() if data.valid_until else None,
+            },
+            "forecaster": data.forecaster,
+            "highest_level": data.highest_level,
+            "hazards": [hazard.label for hazard in data.hazards],
+            "discussion_available": bool(data.discussion),
+            "summary_available": bool(data.summary_nl),
+        }
+
     async def async_camera_image(
         self,
         width: int | None = None,
