@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,6 +14,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import BASE_URL, DEFAULT_SCAN_INTERVAL_HOURS, LATEST_IMAGE_FILENAME, WWW_DIR
+from .parser import (
+    EstofexMesoscaleDiscussion,
+    ParsedEstofexForecast,
+    parse_estofex_forecast,
+)
+from .translator import async_summarize_to_dutch, async_translate_to_dutch
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,21 +31,43 @@ STATUS_ERROR = "Error"
 
 
 @dataclass(slots=True)
-class EstofexForecast:
-    """Container for the latest ESTOFEX forecast metadata."""
+class EstofexForecastData:
+    """Container for the latest ESTOFEX forecast data."""
 
     fcstfile: str | None
     image_url: str | None
     local_image_url: str | None
+    local_map_path: str | None
+    title: str | None
     issued_at: datetime | None
+    valid_from: datetime | None
     valid_until: datetime | None
     forecast_number: str | None
+    forecaster: str | None
+    discussion_original: str | None
+    discussion_nl: str | None
+    summary_nl: str | None
+    level_texts: tuple[str, ...]
+    mesoscale_discussions: tuple[EstofexMesoscaleDiscussion, ...]
+    status: str
+    last_checked: datetime | None
+    last_successful_update: datetime | None
     changed: bool
     map_available: bool
 
+    @property
+    def forecast_id(self) -> str | None:
+        """Return the ESTOFEX forecast id."""
+        return self.fcstfile
 
-class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
-    """Coordinator that fetches latest ESTOFEX forecast metadata and map."""
+    @property
+    def map_url(self) -> str | None:
+        """Return the remote ESTOFEX map URL."""
+        return self.image_url
+
+
+class EstofexCoordinator(DataUpdateCoordinator[EstofexForecastData]):
+    """Coordinator that fetches latest ESTOFEX forecast text and map."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the coordinator."""
@@ -57,15 +85,17 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         self.last_image_downloaded: datetime | None = None
         self.last_http_status: int | None = None
         self.last_list_http_status: int | None = None
+        self.last_forecast_http_status: int | None = None
         self.last_image_http_status: int | None = None
         self.last_error: str | None = None
 
-    async def _async_update_data(self) -> EstofexForecast:
+    async def _async_update_data(self) -> EstofexForecastData:
         """Fetch latest data from ESTOFEX."""
         self.last_checked = datetime.now(timezone.utc)
         self.image_downloaded = False
         self.last_http_status = None
         self.last_list_http_status = None
+        self.last_forecast_http_status = None
         self.last_image_http_status = None
         self.last_error = None
         self._set_status(STATUS_UPDATING, notify=True)
@@ -105,7 +135,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
         return self._extract_latest_fcstfile(html)
 
-    async def _handle_no_forecast(self) -> EstofexForecast:
+    async def _handle_no_forecast(self) -> EstofexForecastData:
         """Clear local forecast state when ESTOFEX has no active forecast."""
         _LOGGER.info("No active ESTOFEX forecast found")
         try:
@@ -118,18 +148,28 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             self._set_status(STATUS_NO_FORECAST)
         return self._empty_forecast()
 
-    async def _handle_forecast(self, fcstfile: str) -> EstofexForecast:
+    async def _handle_forecast(self, fcstfile: str) -> EstofexForecastData:
         """Apply download policy for an active ESTOFEX forecast."""
         image_url = f"{BASE_URL}?lightningmap=yes&fcstfile={fcstfile}"
         previous_fcstfile = self.data.fcstfile if self.data else None
         changed = fcstfile != previous_fcstfile
+        needs_image_download = changed or not (
+            self.data and self.data.map_available
+        )
+        parsed = await self._fetch_forecast_text(fcstfile)
+        discussion_original = parsed.discussion_text
+        discussion_nl = await async_translate_to_dutch(
+            self.hass, discussion_original
+        )
+        summary_nl = await async_summarize_to_dutch(self.hass, discussion_original)
 
-        if changed:
+        if needs_image_download:
             await self._download_image(image_url)
             self.image_downloaded = True
-            self.last_changed = datetime.now(timezone.utc)
-            self.last_successful_update = self.last_changed
-            self.last_image_downloaded = self.last_changed
+            downloaded_at = datetime.now(timezone.utc)
+            if changed:
+                self.last_changed = downloaded_at
+            self.last_image_downloaded = downloaded_at
             map_available = True
             _LOGGER.info("Downloaded new ESTOFEX forecast map: %s", fcstfile)
         else:
@@ -137,45 +177,81 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             _LOGGER.debug("ESTOFEX forecast unchanged: %s", fcstfile)
 
         issued_at, valid_until, forecast_number = self._parse_fcstfile(fcstfile)
+        issued_at = parsed.issued_at or issued_at
+        valid_until = parsed.valid_until or valid_until
+        forecast_number = parsed.forecast_number or forecast_number
+        self.last_successful_update = datetime.now(timezone.utc)
         self._set_status(STATUS_OK)
 
-        return EstofexForecast(
+        return EstofexForecastData(
             fcstfile=fcstfile,
             image_url=image_url,
             local_image_url=(
                 f"/local/estofex/{LATEST_IMAGE_FILENAME}" if map_available else None
             ),
+            local_map_path=str(self._latest_image_path()) if map_available else None,
+            title=parsed.title,
             issued_at=issued_at,
+            valid_from=parsed.valid_from,
             valid_until=valid_until,
             forecast_number=forecast_number,
+            forecaster=parsed.forecaster,
+            discussion_original=discussion_original,
+            discussion_nl=discussion_nl,
+            summary_nl=summary_nl,
+            level_texts=parsed.level_texts,
+            mesoscale_discussions=parsed.mesoscale_discussions,
+            status=self.status,
+            last_checked=self.last_checked,
+            last_successful_update=self.last_successful_update,
             changed=changed,
             map_available=map_available,
         )
 
-    def _handle_offline(self, err: Exception) -> EstofexForecast:
+    def _handle_offline(self, err: Exception) -> EstofexForecastData:
         """Keep previous forecast data when ESTOFEX cannot be reached."""
         self.last_error = str(err)
         self._set_status(STATUS_OFFLINE)
         _LOGGER.warning("ESTOFEX is unreachable: %s", err)
-        return self.data or self._empty_forecast()
+        return self._current_or_empty_forecast()
 
-    def _handle_error(self, err: Exception) -> EstofexForecast:
+    def _handle_error(self, err: Exception) -> EstofexForecastData:
         """Expose unexpected update failures while keeping current data."""
         self.last_error = str(err)
         self._set_status(STATUS_ERROR)
         _LOGGER.error("Error while updating ESTOFEX: %s", err)
-        return self.data or self._empty_forecast()
+        return self._current_or_empty_forecast()
 
-    @staticmethod
-    def _empty_forecast() -> EstofexForecast:
+    def _current_or_empty_forecast(self) -> EstofexForecastData:
+        """Return current forecast data with fresh runtime status."""
+        return replace(
+            self.data or self._empty_forecast(),
+            status=self.status,
+            last_checked=self.last_checked,
+            last_successful_update=self.last_successful_update,
+        )
+
+    def _empty_forecast(self) -> EstofexForecastData:
         """Return an empty forecast payload."""
-        return EstofexForecast(
+        return EstofexForecastData(
             fcstfile=None,
             image_url=None,
             local_image_url=None,
+            local_map_path=None,
+            title=None,
             issued_at=None,
+            valid_from=None,
             valid_until=None,
             forecast_number=None,
+            forecaster=None,
+            discussion_original=None,
+            discussion_nl=None,
+            summary_nl=None,
+            level_texts=(),
+            mesoscale_discussions=(),
+            status=self.status,
+            last_checked=self.last_checked,
+            last_successful_update=self.last_successful_update,
             changed=False,
             map_available=False,
         )
@@ -229,6 +305,22 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             data = await response.read()
 
         await self.hass.async_add_executor_job(out_file.write_bytes, data)
+
+    async def _fetch_forecast_text(
+        self, fcstfile: str
+    ) -> ParsedEstofexForecast:
+        """Fetch and parse the latest ESTOFEX forecast text."""
+        session = async_get_clientsession(self.hass)
+        forecast_url = f"{BASE_URL}?fcstfile={fcstfile}&text=yes"
+
+        _LOGGER.debug("Fetching ESTOFEX forecast text: %s", fcstfile)
+        async with session.get(forecast_url, timeout=20) as response:
+            self.last_http_status = response.status
+            self.last_forecast_http_status = response.status
+            response.raise_for_status()
+            html = await response.text()
+
+        return parse_estofex_forecast(html, fcstfile)
 
     async def _remove_latest_image(self) -> None:
         """Remove the cached forecast map if it exists."""

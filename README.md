@@ -7,6 +7,7 @@ This is an early v0.1 integration.
 ## Features
 
 - Fetches the latest ESTOFEX `stormforecast.xml` forecast id
+- Fetches and parses the original ESTOFEX forecast discussion text
 - Downloads the latest ESTOFEX forecast map to `/config/www/estofex/latest.png`
 - Adds a camera entity for the latest map
 - Polls ESTOFEX every hour
@@ -17,6 +18,9 @@ This is an early v0.1 integration.
   - Valid Until
   - Forecast Number
   - Local Map URL
+  - Discussion
+  - Summary NL
+  - Discussion NL
   - Status
   - Last Checked
   - Last Successful Update
@@ -93,6 +97,9 @@ entities:
   - entity: sensor.estofex_valid_until
   - entity: sensor.estofex_forecast_number
   - entity: sensor.estofex_map_url
+  - entity: sensor.estofex_discussion
+  - entity: sensor.estofex_summary_nl
+  - entity: sensor.estofex_discussion_nl
 ```
 
 ### Update button and diagnostics
@@ -113,13 +120,17 @@ entities:
 
 This integration scrapes the public ESTOFEX forecast listing page. If ESTOFEX changes the HTML structure, the forecast id extraction may need to be adjusted.
 
-When no active forecast exists, the cached map is removed and the camera becomes unavailable. If ESTOFEX is temporarily unreachable, the previous map may remain available while `sensor.estofex_status` reports `Offline`.
+When no active forecast exists, the cached map is removed, the camera becomes unavailable, and discussion text attributes are cleared. If ESTOFEX is temporarily unreachable, the previous map and discussion may remain available while `sensor.estofex_status` reports `Offline`.
+
+`sensor.estofex_discussion` has a short state (`Available`, `No forecast`, or `Unavailable`) and exposes the original English discussion text through the `original_text` attribute. It also exposes parsed metadata such as `level_texts`, `forecaster`, `issued_at`, `valid_from`, and `valid_until`.
+
+`sensor.estofex_summary_nl` and `sensor.estofex_discussion_nl` are prepared for future Dutch summarization and translation. They currently do not call any AI service and report `Unavailable` when no optional provider has produced Dutch text.
 
 `sensor.estofex_status` can report `OK`, `Updating`, `No forecast`, `Offline`, or `Error`.
 
 ## Roadmap
 
-- Parse warning levels from forecast text
+- Add optional Dutch AI/provider configuration for summaries and translations
 - Add Mesoscale Discussion support
 - Add notification-friendly binary sensor for new forecasts
 - Add options flow for update interval

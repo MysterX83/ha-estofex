@@ -34,6 +34,9 @@ async def async_setup_entry(
             EstofexValidUntilSensor(coordinator),
             EstofexForecastNumberSensor(coordinator),
             EstofexMapUrlSensor(coordinator),
+            EstofexDiscussionSensor(coordinator),
+            EstofexSummaryNlSensor(coordinator),
+            EstofexDiscussionNlSensor(coordinator),
             EstofexLastCheckedSensor(coordinator),
             EstofexLastSuccessfulUpdateSensor(coordinator),
             EstofexLastChangedSensor(coordinator),
@@ -64,6 +67,7 @@ class EstofexForecastIdSensor(EstofexEntity, SensorEntity):
         return {
             "image_url": self.coordinator.data.image_url,
             "local_image_url": self.coordinator.data.local_image_url,
+            "local_map_path": self.coordinator.data.local_map_path,
             "changed": self.coordinator.data.changed,
             "map_available": self.coordinator.data.map_available,
         }
@@ -119,6 +123,106 @@ class EstofexMapUrlSensor(EstofexEntity, SensorEntity):
     def native_value(self) -> str | None:
         """Return local image url."""
         return self.coordinator.data.local_image_url if self.coordinator.data else None
+
+
+class EstofexDiscussionSensor(EstofexEntity, SensorEntity):
+    """Original ESTOFEX forecast discussion text."""
+
+    _attr_name = "Discussion"
+    _attr_unique_id = "estofex_discussion"
+    _attr_icon = "mdi:text-box-outline"
+
+    @property
+    def native_value(self) -> str:
+        """Return a short discussion availability state."""
+        data = self.coordinator.data
+        if not data or not data.fcstfile:
+            return "No forecast"
+        if data.discussion_original:
+            return "Available"
+        return "Unavailable"
+
+    @property
+    def extra_state_attributes(self):
+        """Return parsed forecast discussion attributes."""
+        data = self.coordinator.data
+        if not data:
+            return {}
+        return {
+            "original_text": data.discussion_original,
+            "level_texts": list(data.level_texts),
+            "title": data.title,
+            "forecaster": data.forecaster,
+            "issued_at": _format_timestamp(data.issued_at),
+            "valid_from": _format_timestamp(data.valid_from),
+            "valid_until": _format_timestamp(data.valid_until),
+            "forecast_number": data.forecast_number,
+            "forecast_id": data.forecast_id,
+        }
+
+
+class EstofexSummaryNlSensor(EstofexEntity, SensorEntity):
+    """Dutch practical summary of the ESTOFEX discussion."""
+
+    _attr_name = "Summary NL"
+    _attr_unique_id = "estofex_summary_nl"
+    _attr_icon = "mdi:text-box-check-outline"
+
+    @property
+    def native_value(self) -> str:
+        """Return a short Dutch summary availability state."""
+        data = self.coordinator.data
+        if not data or not data.fcstfile:
+            return "No forecast"
+        if data.summary_nl:
+            return "Available"
+        return "Unavailable"
+
+    @property
+    def extra_state_attributes(self):
+        """Return Dutch summary attributes."""
+        data = self.coordinator.data
+        if not data:
+            return {}
+        return {
+            "summary_text": data.summary_nl,
+            "source_available": bool(data.discussion_original),
+            "forecast_id": data.forecast_id,
+            "issued_at": _format_timestamp(data.issued_at),
+            "valid_until": _format_timestamp(data.valid_until),
+        }
+
+
+class EstofexDiscussionNlSensor(EstofexEntity, SensorEntity):
+    """Dutch translation of the ESTOFEX discussion."""
+
+    _attr_name = "Discussion NL"
+    _attr_unique_id = "estofex_discussion_nl"
+    _attr_icon = "mdi:translate"
+
+    @property
+    def native_value(self) -> str:
+        """Return a short Dutch discussion availability state."""
+        data = self.coordinator.data
+        if not data or not data.fcstfile:
+            return "No forecast"
+        if data.discussion_nl:
+            return "Available"
+        return "Unavailable"
+
+    @property
+    def extra_state_attributes(self):
+        """Return Dutch discussion attributes."""
+        data = self.coordinator.data
+        if not data:
+            return {}
+        return {
+            "translated_text": data.discussion_nl,
+            "source_available": bool(data.discussion_original),
+            "forecast_id": data.forecast_id,
+            "issued_at": _format_timestamp(data.issued_at),
+            "valid_until": _format_timestamp(data.valid_until),
+        }
 
 
 class EstofexLastCheckedSensor(EstofexEntity, SensorEntity):
@@ -204,6 +308,7 @@ class EstofexHttpStatusSensor(EstofexEntity, SensorEntity):
         """Return detailed HTTP status diagnostics."""
         return {
             "list_http_status": self.coordinator.last_list_http_status,
+            "forecast_http_status": self.coordinator.last_forecast_http_status,
             "image_http_status": self.coordinator.last_image_http_status,
         }
 
@@ -237,5 +342,6 @@ class EstofexStatusSensor(EstofexEntity, SensorEntity):
             ),
             "last_http_status": self.coordinator.last_http_status,
             "list_http_status": self.coordinator.last_list_http_status,
+            "forecast_http_status": self.coordinator.last_forecast_http_status,
             "image_http_status": self.coordinator.last_image_http_status,
         }
