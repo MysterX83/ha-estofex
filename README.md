@@ -9,20 +9,20 @@ This is an early v0.1 integration.
 - Fetches the latest ESTOFEX `stormforecast.xml` forecast id
 - Downloads the latest ESTOFEX forecast map to `/config/www/estofex/latest.png`
 - Adds a camera entity for the latest map
-- Polls ESTOFEX every 30 minutes
-- Adds an update button to manually refresh the forecast and map
+- Polls ESTOFEX every hour
+- Adds an update button to manually run the same coordinator refresh
 - Adds sensors for:
   - Forecast ID
   - Issued At
   - Valid Until
   - Forecast Number
   - Local Map URL
+  - Status
   - Last Checked
   - Last Successful Update
   - Last Changed
   - Image Downloaded
   - HTTP Status
-  - Update Status
 
 ## Installation manually
 
@@ -101,7 +101,7 @@ entities:
 type: entities
 entities:
   - entity: button.estofex_update_now
-  - entity: sensor.estofex_update_status
+  - entity: sensor.estofex_status
   - entity: sensor.estofex_last_checked
   - entity: sensor.estofex_last_successful_update
   - entity: sensor.estofex_last_changed
@@ -112,6 +112,10 @@ entities:
 ## Notes
 
 This integration scrapes the public ESTOFEX forecast listing page. If ESTOFEX changes the HTML structure, the forecast id extraction may need to be adjusted.
+
+When no active forecast exists, the cached map is removed and the camera becomes unavailable. If ESTOFEX is temporarily unreachable, the previous map may remain available while `sensor.estofex_status` reports `Offline`.
+
+`sensor.estofex_status` can report `OK`, `Updating`, `No forecast`, `Offline`, or `Error`.
 
 ## Roadmap
 

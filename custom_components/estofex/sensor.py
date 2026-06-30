@@ -39,7 +39,7 @@ async def async_setup_entry(
             EstofexLastChangedSensor(coordinator),
             EstofexImageDownloadedSensor(coordinator),
             EstofexHttpStatusSensor(coordinator),
-            EstofexUpdateStatusSensor(coordinator),
+            EstofexStatusSensor(coordinator),
         ]
     )
 
@@ -65,6 +65,7 @@ class EstofexForecastIdSensor(EstofexEntity, SensorEntity):
             "image_url": self.coordinator.data.image_url,
             "local_image_url": self.coordinator.data.local_image_url,
             "changed": self.coordinator.data.changed,
+            "map_available": self.coordinator.data.map_available,
         }
 
 
@@ -207,18 +208,18 @@ class EstofexHttpStatusSensor(EstofexEntity, SensorEntity):
         }
 
 
-class EstofexUpdateStatusSensor(EstofexEntity, SensorEntity):
+class EstofexStatusSensor(EstofexEntity, SensorEntity):
     """Status of the latest ESTOFEX update."""
 
-    _attr_name = "Update Status"
-    _attr_unique_id = "estofex_update_status"
+    _attr_name = "Status"
+    _attr_unique_id = "estofex_status"
     _attr_icon = "mdi:cloud-sync"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def native_value(self) -> str:
         """Return update status."""
-        return "error" if self.coordinator.last_error else "ok"
+        return self.coordinator.status
 
     @property
     def extra_state_attributes(self):

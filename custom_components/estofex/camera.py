@@ -36,8 +36,20 @@ class EstofexMapCamera(EstofexEntity, Camera):
         Camera.__init__(self)
         self._hass = hass
 
-    async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
+    @property
+    def available(self) -> bool:
+        """Return whether the camera has a forecast map to expose."""
+        return super().available and self.coordinator.has_forecast_map
+
+    async def async_camera_image(
+        self,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> bytes | None:
         """Return bytes of camera image."""
+        if not self.coordinator.has_forecast_map:
+            return None
+
         image_path = Path(self._hass.config.path(WWW_DIR)) / LATEST_IMAGE_FILENAME
         if not image_path.exists():
             return None

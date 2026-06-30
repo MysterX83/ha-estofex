@@ -11,11 +11,17 @@ from aiohttp import ClientError
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import BASE_URL, DEFAULT_SCAN_INTERVAL_MINUTES, LATEST_IMAGE_FILENAME, WWW_DIR
+from .const import BASE_URL, DEFAULT_SCAN_INTERVAL_HOURS, LATEST_IMAGE_FILENAME, WWW_DIR
 
 _LOGGER = logging.getLogger(__name__)
+
+STATUS_OK = "OK"
+STATUS_UPDATING = "Updating"
+STATUS_NO_FORECAST = "No forecast"
+STATUS_OFFLINE = "Offline"
+STATUS_ERROR = "Error"
 
 
 @dataclass(slots=True)
@@ -29,6 +35,7 @@ class EstofexForecast:
     valid_until: datetime | None
     forecast_number: str | None
     changed: bool
+    map_available: bool
 
 
 class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
@@ -40,10 +47,9 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             hass,
             _LOGGER,
             name="ESTOFEX",
-            update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
+            update_interval=timedelta(hours=DEFAULT_SCAN_INTERVAL_HOURS),
         )
-        self._last_fcstfile: str | None = None
-        self._force_download = False
+        self.status = STATUS_UPDATING
         self.last_checked: datetime | None = None
         self.last_successful_update: datetime | None = None
         self.last_changed: datetime | None = None
@@ -54,14 +60,6 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         self.last_image_http_status: int | None = None
         self.last_error: str | None = None
 
-    async def async_force_refresh(self) -> None:
-        """Request an immediate update and force the map image to download."""
-        self._force_download = True
-        try:
-            await self.async_request_refresh()
-        finally:
-            self._force_download = False
-
     async def _async_update_data(self) -> EstofexForecast:
         """Fetch latest data from ESTOFEX."""
         self.last_checked = datetime.now(timezone.utc)
@@ -70,18 +68,31 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         self.last_list_http_status = None
         self.last_image_http_status = None
         self.last_error = None
+        self._set_status(STATUS_UPDATING, notify=True)
 
         try:
-            data = await self._fetch_latest_forecast()
-        except (ClientError, TimeoutError, OSError, ValueError) as err:
-            self.last_error = str(err)
-            raise UpdateFailed(f"Error while updating ESTOFEX: {err}") from err
+            fcstfile = await self._fetch_latest_fcstfile()
+            if not fcstfile:
+                return await self._handle_no_forecast()
+            return await self._handle_forecast(fcstfile)
+        except (ClientError, TimeoutError) as err:
+            return self._handle_offline(err)
+        except (OSError, ValueError) as err:
+            return self._handle_error(err)
 
-        self.last_successful_update = datetime.now(timezone.utc)
-        return data
+    @property
+    def has_forecast_map(self) -> bool:
+        """Return whether the coordinator has a forecast map to expose."""
+        return bool(self.data and self.data.fcstfile and self.data.map_available)
 
-    async def _fetch_latest_forecast(self) -> EstofexForecast:
-        """Fetch the latest forecast id and download its map when needed."""
+    def _set_status(self, status: str, notify: bool = False) -> None:
+        """Set integration status."""
+        self.status = status
+        if notify:
+            self.async_update_listeners()
+
+    async def _fetch_latest_fcstfile(self) -> str | None:
+        """Fetch and parse the latest forecast id from ESTOFEX."""
         session = async_get_clientsession(self.hass)
         list_url = f"{BASE_URL}?list=yes"
 
@@ -92,49 +103,81 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             response.raise_for_status()
             html = await response.text()
 
-        fcstfile = self._extract_latest_fcstfile(html)
+        return self._extract_latest_fcstfile(html)
 
-        if not fcstfile:
-            _LOGGER.warning("No ESTOFEX fcstfile found")
-            return EstofexForecast(
-                fcstfile=None,
-                image_url=None,
-                local_image_url=None,
-                issued_at=None,
-                valid_until=None,
-                forecast_number=None,
-                changed=False,
-            )
-
-        image_url = f"{BASE_URL}?lightningmap=yes&fcstfile={fcstfile}"
-        changed = fcstfile != self._last_fcstfile
-        if changed:
-            self.last_changed = datetime.now(timezone.utc)
-
-        should_download = changed or self._force_download or not self._latest_image_exists()
-
-        if should_download:
-            await self._download_image(image_url)
-            self._last_fcstfile = fcstfile
-            self.image_downloaded = True
-            self.last_image_downloaded = datetime.now(timezone.utc)
-            if self._force_download and not changed:
-                _LOGGER.info("Downloaded ESTOFEX forecast map on demand: %s", fcstfile)
-            else:
-                _LOGGER.info("Downloaded new ESTOFEX forecast map: %s", fcstfile)
+    async def _handle_no_forecast(self) -> EstofexForecast:
+        """Clear local forecast state when ESTOFEX has no active forecast."""
+        _LOGGER.info("No active ESTOFEX forecast found")
+        try:
+            await self._remove_latest_image()
+        except OSError as err:
+            self.last_error = str(err)
+            self._set_status(STATUS_ERROR)
+            _LOGGER.error("Could not remove stale ESTOFEX forecast map: %s", err)
         else:
+            self._set_status(STATUS_NO_FORECAST)
+        return self._empty_forecast()
+
+    async def _handle_forecast(self, fcstfile: str) -> EstofexForecast:
+        """Apply download policy for an active ESTOFEX forecast."""
+        image_url = f"{BASE_URL}?lightningmap=yes&fcstfile={fcstfile}"
+        previous_fcstfile = self.data.fcstfile if self.data else None
+        changed = fcstfile != previous_fcstfile
+
+        if changed:
+            await self._download_image(image_url)
+            self.image_downloaded = True
+            self.last_changed = datetime.now(timezone.utc)
+            self.last_successful_update = self.last_changed
+            self.last_image_downloaded = self.last_changed
+            map_available = True
+            _LOGGER.info("Downloaded new ESTOFEX forecast map: %s", fcstfile)
+        else:
+            map_available = self.data.map_available if self.data else False
             _LOGGER.debug("ESTOFEX forecast unchanged: %s", fcstfile)
 
         issued_at, valid_until, forecast_number = self._parse_fcstfile(fcstfile)
+        self._set_status(STATUS_OK)
 
         return EstofexForecast(
             fcstfile=fcstfile,
             image_url=image_url,
-            local_image_url=f"/local/estofex/{LATEST_IMAGE_FILENAME}",
+            local_image_url=(
+                f"/local/estofex/{LATEST_IMAGE_FILENAME}" if map_available else None
+            ),
             issued_at=issued_at,
             valid_until=valid_until,
             forecast_number=forecast_number,
             changed=changed,
+            map_available=map_available,
+        )
+
+    def _handle_offline(self, err: Exception) -> EstofexForecast:
+        """Keep previous forecast data when ESTOFEX cannot be reached."""
+        self.last_error = str(err)
+        self._set_status(STATUS_OFFLINE)
+        _LOGGER.warning("ESTOFEX is unreachable: %s", err)
+        return self.data or self._empty_forecast()
+
+    def _handle_error(self, err: Exception) -> EstofexForecast:
+        """Expose unexpected update failures while keeping current data."""
+        self.last_error = str(err)
+        self._set_status(STATUS_ERROR)
+        _LOGGER.error("Error while updating ESTOFEX: %s", err)
+        return self.data or self._empty_forecast()
+
+    @staticmethod
+    def _empty_forecast() -> EstofexForecast:
+        """Return an empty forecast payload."""
+        return EstofexForecast(
+            fcstfile=None,
+            image_url=None,
+            local_image_url=None,
+            issued_at=None,
+            valid_until=None,
+            forecast_number=None,
+            changed=False,
+            map_available=False,
         )
 
     @staticmethod
@@ -144,7 +187,9 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         return matches[0] if matches else None
 
     @staticmethod
-    def _parse_fcstfile(fcstfile: str) -> tuple[datetime | None, datetime | None, str | None]:
+    def _parse_fcstfile(
+        fcstfile: str,
+    ) -> tuple[datetime | None, datetime | None, str | None]:
         """Parse timestamps from a fcstfile name.
 
         Example: 2026070106_202606291259_1_stormforecast.xml
@@ -171,15 +216,11 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         """Return the filesystem path for the latest map image."""
         return Path(self.hass.config.path(WWW_DIR)) / LATEST_IMAGE_FILENAME
 
-    def _latest_image_exists(self) -> bool:
-        """Return whether the latest map image exists."""
-        return self._latest_image_path().exists()
-
     async def _download_image(self, image_url: str) -> None:
         """Download the latest forecast map into /config/www/estofex/latest.png."""
         session = async_get_clientsession(self.hass)
         out_file = self._latest_image_path()
-        out_file.parent.mkdir(parents=True, exist_ok=True)
+        await self.hass.async_add_executor_job(self._ensure_latest_image_dir)
 
         async with session.get(image_url, timeout=20) as response:
             self.last_http_status = response.status
@@ -187,4 +228,18 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             response.raise_for_status()
             data = await response.read()
 
-        out_file.write_bytes(data)
+        await self.hass.async_add_executor_job(out_file.write_bytes, data)
+
+    async def _remove_latest_image(self) -> None:
+        """Remove the cached forecast map if it exists."""
+        await self.hass.async_add_executor_job(self._remove_latest_image_file)
+
+    def _ensure_latest_image_dir(self) -> None:
+        """Create the cached forecast map directory."""
+        self._latest_image_path().parent.mkdir(parents=True, exist_ok=True)
+
+    def _remove_latest_image_file(self) -> None:
+        """Remove the cached forecast map from disk."""
+        image_path = self._latest_image_path()
+        if image_path.exists():
+            image_path.unlink()

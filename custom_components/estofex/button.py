@@ -32,4 +32,4 @@ class EstofexUpdateNowButton(EstofexEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Request an immediate ESTOFEX update."""
-        await self.coordinator.async_force_refresh()
+        await self.coordinator.async_request_refresh()
