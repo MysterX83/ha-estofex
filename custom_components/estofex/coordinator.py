@@ -43,20 +43,52 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
         )
         self._last_fcstfile: str | None = None
+        self._force_download = False
+        self.last_checked: datetime | None = None
+        self.last_successful_update: datetime | None = None
+        self.last_changed: datetime | None = None
+        self.image_downloaded = False
+        self.last_image_downloaded: datetime | None = None
+        self.last_http_status: int | None = None
+        self.last_list_http_status: int | None = None
+        self.last_image_http_status: int | None = None
+        self.last_error: str | None = None
+
+    async def async_force_refresh(self) -> None:
+        """Request an immediate update and force the map image to download."""
+        self._force_download = True
+        try:
+            await self.async_request_refresh()
+        finally:
+            self._force_download = False
 
     async def _async_update_data(self) -> EstofexForecast:
         """Fetch latest data from ESTOFEX."""
+        self.last_checked = datetime.now(timezone.utc)
+        self.image_downloaded = False
+        self.last_http_status = None
+        self.last_list_http_status = None
+        self.last_image_http_status = None
+        self.last_error = None
+
         try:
-            return await self._fetch_latest_forecast()
+            data = await self._fetch_latest_forecast()
         except (ClientError, TimeoutError, OSError, ValueError) as err:
+            self.last_error = str(err)
             raise UpdateFailed(f"Error while updating ESTOFEX: {err}") from err
+
+        self.last_successful_update = datetime.now(timezone.utc)
+        return data
 
     async def _fetch_latest_forecast(self) -> EstofexForecast:
         """Fetch the latest forecast id and download its map when needed."""
         session = async_get_clientsession(self.hass)
         list_url = f"{BASE_URL}?list=yes"
 
+        _LOGGER.debug("Checking ESTOFEX for latest forecast")
         async with session.get(list_url, timeout=20) as response:
+            self.last_http_status = response.status
+            self.last_list_http_status = response.status
             response.raise_for_status()
             html = await response.text()
 
@@ -76,11 +108,20 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
         image_url = f"{BASE_URL}?lightningmap=yes&fcstfile={fcstfile}"
         changed = fcstfile != self._last_fcstfile
+        if changed:
+            self.last_changed = datetime.now(timezone.utc)
 
-        if changed or not self._latest_image_exists():
+        should_download = changed or self._force_download or not self._latest_image_exists()
+
+        if should_download:
             await self._download_image(image_url)
             self._last_fcstfile = fcstfile
-            _LOGGER.info("Downloaded new ESTOFEX forecast map: %s", fcstfile)
+            self.image_downloaded = True
+            self.last_image_downloaded = datetime.now(timezone.utc)
+            if self._force_download and not changed:
+                _LOGGER.info("Downloaded ESTOFEX forecast map on demand: %s", fcstfile)
+            else:
+                _LOGGER.info("Downloaded new ESTOFEX forecast map: %s", fcstfile)
         else:
             _LOGGER.debug("ESTOFEX forecast unchanged: %s", fcstfile)
 
@@ -141,6 +182,8 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         out_file.parent.mkdir(parents=True, exist_ok=True)
 
         async with session.get(image_url, timeout=20) as response:
+            self.last_http_status = response.status
+            self.last_image_http_status = response.status
             response.raise_for_status()
             data = await response.read()
 
