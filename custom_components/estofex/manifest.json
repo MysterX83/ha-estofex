@@ -1,0 +1,12 @@
+{
+  "domain": "estofex",
+  "name": "ESTOFEX",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/dvolaart/ha-estofex",
+  "issue_tracker": "https://github.com/dvolaart/ha-estofex/issues",
+  "codeowners": ["@dvolaart"],
+  "iot_class": "cloud_polling",
+  "integration_type": "service",
+  "requirements": []
+}

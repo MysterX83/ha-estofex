@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ESTOFEX",
+        "description": "Set up ESTOFEX storm forecast monitoring."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one ESTOFEX instance is allowed."
+    }
+  }
+}
