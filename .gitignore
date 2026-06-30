@@ -5,3 +5,8 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# Local development
+deploy.sh
+watch.sh
+.vscode/
