@@ -9,5 +9,90 @@
     "abort": {
       "single_instance_allowed": "Er is maar een ESTOFEX instantie toegestaan."
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "local_warning": {
+        "name": "Lokale waarschuwing"
+      },
+      "forecast_changed": {
+        "name": "Verwachting gewijzigd"
+      },
+      "large_hail": {
+        "name": "Grote hagel"
+      },
+      "severe_wind": {
+        "name": "Zware windstoten"
+      },
+      "excessive_rain": {
+        "name": "Extreme regen"
+      },
+      "tornado": {
+        "name": "Tornado"
+      },
+      "flash_flood": {
+        "name": "Plotselinge overstroming"
+      }
+    },
+    "button": {
+      "update_now": {
+        "name": "Nu bijwerken"
+      }
+    },
+    "camera": {
+      "map": {
+        "name": "Kaart"
+      }
+    },
+    "sensor": {
+      "forecast_id": {
+        "name": "Verwachting-ID"
+      },
+      "issued_at": {
+        "name": "Uitgegeven om"
+      },
+      "valid_until": {
+        "name": "Geldig tot"
+      },
+      "forecast_number": {
+        "name": "Verwachtingnummer"
+      },
+      "map_url": {
+        "name": "Kaart-URL"
+      },
+      "local_level": {
+        "name": "Lokaal niveau"
+      },
+      "local_summary": {
+        "name": "Lokale samenvatting"
+      },
+      "discussion": {
+        "name": "Discussie"
+      },
+      "summary_nl": {
+        "name": "Samenvatting NL"
+      },
+      "discussion_nl": {
+        "name": "Discussie NL"
+      },
+      "last_checked": {
+        "name": "Laatst gecontroleerd"
+      },
+      "last_successful_update": {
+        "name": "Laatste succesvolle update"
+      },
+      "last_changed": {
+        "name": "Laatst gewijzigd"
+      },
+      "image_downloaded": {
+        "name": "Afbeelding gedownload"
+      },
+      "http_status": {
+        "name": "HTTP-status"
+      },
+      "status": {
+        "name": "Status"
+      }
+    }
   }
 }

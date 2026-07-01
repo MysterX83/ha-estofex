@@ -27,6 +27,7 @@ class EstofexUpdateNowButton(EstofexEntity, ButtonEntity):
 
     _attr_name = "Update Now"
     _attr_unique_id = "estofex_update_now"
+    _attr_translation_key = "update_now"
     _attr_icon = "mdi:refresh"
     _attr_entity_category = EntityCategory.CONFIG
 

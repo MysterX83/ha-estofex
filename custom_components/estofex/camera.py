@@ -28,6 +28,7 @@ class EstofexMapCamera(EstofexEntity, Camera):
 
     _attr_name = "Map"
     _attr_unique_id = "estofex_map"
+    _attr_translation_key = "map"
     _attr_icon = "mdi:map"
 
     def __init__(self, coordinator: EstofexCoordinator, hass: HomeAssistant) -> None:

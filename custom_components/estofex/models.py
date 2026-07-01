@@ -71,6 +71,16 @@ class EstofexPolygon:
 
 
 @dataclass(frozen=True, slots=True)
+class EstofexDiscussion:
+    """A forecast discussion and optional translated forms."""
+
+    original: str | None = None
+    discussion_nl: str | None = None
+    summary_nl: str | None = None
+    level_texts: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class EstofexMesoscaleDiscussion:
     """A future-ready ESTOFEX Mesoscale Discussion model."""
 
@@ -100,6 +110,17 @@ class EstofexLocalWarning:
     def hazard_labels(self) -> list[str]:
         """Return active hazard labels."""
         return [hazard.label for hazard in self.hazards]
+
+
+@dataclass(frozen=True, slots=True)
+class EstofexUpdateResult:
+    """Result of a coordinator update cycle."""
+
+    forecast: EstofexForecast
+    downloaded_map: bool = False
+    forecast_changed: bool = False
+    status: str = "Updating"
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

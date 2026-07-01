@@ -1,7 +1,38 @@
 """Geometry helpers for ESTOFEX polygons."""
 from __future__ import annotations
 
+from .models import EstofexHazard, EstofexLocalWarning, EstofexPolygon
+
 _EPSILON = 1e-9
+
+
+def evaluate_location_warning(
+    latitude: float | None,
+    longitude: float | None,
+    polygons: tuple[EstofexPolygon, ...],
+) -> EstofexLocalWarning:
+    """Evaluate a location against forecast polygons."""
+    if latitude is None or longitude is None:
+        return EstofexLocalWarning()
+
+    matching = [
+        polygon
+        for polygon in polygons
+        if point_in_polygon(latitude, longitude, polygon.coordinates)
+    ]
+    if not matching:
+        return EstofexLocalWarning()
+
+    best_polygon = max(
+        matching,
+        key=lambda polygon: (polygon.level_number, len(polygon.hazards)),
+    )
+    return EstofexLocalWarning(
+        active=True,
+        level=best_polygon.level,
+        hazards=_unique_hazards(matching),
+        polygon=best_polygon,
+    )
 
 
 def point_in_polygon(
@@ -46,6 +77,17 @@ def point_in_polygon(
         previous_x, previous_y = current_x, current_y
 
     return inside
+
+
+def _unique_hazards(
+    polygons: list[EstofexPolygon],
+) -> tuple[EstofexHazard, ...]:
+    """Return de-duplicated hazards from matching polygons."""
+    hazards: dict[str, EstofexHazard] = {}
+    for polygon in polygons:
+        for hazard in polygon.hazards:
+            hazards.setdefault(hazard.type, hazard)
+    return tuple(hazards.values())
 
 
 def _normalize_longitudes(

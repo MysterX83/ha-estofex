@@ -1,6 +1,6 @@
 {
   "name": "ESTOFEX",
   "render_readme": true,
-  "domains": ["sensor", "camera"],
+  "domains": ["binary_sensor", "button", "camera", "sensor"],
   "homeassistant": "2024.6.0"
 }

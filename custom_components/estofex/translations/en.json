@@ -9,5 +9,90 @@
     "abort": {
       "single_instance_allowed": "Only one ESTOFEX instance is allowed."
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "local_warning": {
+        "name": "Local warning"
+      },
+      "forecast_changed": {
+        "name": "Forecast changed"
+      },
+      "large_hail": {
+        "name": "Large hail"
+      },
+      "severe_wind": {
+        "name": "Severe wind"
+      },
+      "excessive_rain": {
+        "name": "Excessive rain"
+      },
+      "tornado": {
+        "name": "Tornado"
+      },
+      "flash_flood": {
+        "name": "Flash flood"
+      }
+    },
+    "button": {
+      "update_now": {
+        "name": "Update now"
+      }
+    },
+    "camera": {
+      "map": {
+        "name": "Map"
+      }
+    },
+    "sensor": {
+      "forecast_id": {
+        "name": "Forecast ID"
+      },
+      "issued_at": {
+        "name": "Issued at"
+      },
+      "valid_until": {
+        "name": "Valid until"
+      },
+      "forecast_number": {
+        "name": "Forecast number"
+      },
+      "map_url": {
+        "name": "Map URL"
+      },
+      "local_level": {
+        "name": "Local level"
+      },
+      "local_summary": {
+        "name": "Local summary"
+      },
+      "discussion": {
+        "name": "Discussion"
+      },
+      "summary_nl": {
+        "name": "Summary NL"
+      },
+      "discussion_nl": {
+        "name": "Discussion NL"
+      },
+      "last_checked": {
+        "name": "Last checked"
+      },
+      "last_successful_update": {
+        "name": "Last successful update"
+      },
+      "last_changed": {
+        "name": "Last changed"
+      },
+      "image_downloaded": {
+        "name": "Image downloaded"
+      },
+      "http_status": {
+        "name": "HTTP status"
+      },
+      "status": {
+        "name": "Status"
+      }
+    }
   }
 }

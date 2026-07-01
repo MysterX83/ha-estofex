@@ -54,6 +54,7 @@ class EstofexForecastIdSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Forecast ID"
     _attr_unique_id = "estofex_forecast_id"
+    _attr_translation_key = "forecast_id"
     _attr_icon = "mdi:weather-lightning-rainy"
 
     @property
@@ -80,6 +81,7 @@ class EstofexIssuedAtSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Issued At"
     _attr_unique_id = "estofex_issued_at"
+    _attr_translation_key = "issued_at"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
@@ -93,6 +95,7 @@ class EstofexValidUntilSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Valid Until"
     _attr_unique_id = "estofex_valid_until"
+    _attr_translation_key = "valid_until"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
@@ -106,6 +109,7 @@ class EstofexForecastNumberSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Forecast Number"
     _attr_unique_id = "estofex_forecast_number"
+    _attr_translation_key = "forecast_number"
     _attr_icon = "mdi:numeric"
 
     @property
@@ -119,6 +123,7 @@ class EstofexMapUrlSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Map URL"
     _attr_unique_id = "estofex_map_url"
+    _attr_translation_key = "map_url"
     _attr_icon = "mdi:map"
 
     @property
@@ -132,6 +137,7 @@ class EstofexDiscussionSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Discussion"
     _attr_unique_id = "estofex_discussion"
+    _attr_translation_key = "discussion"
     _attr_icon = "mdi:text-box-outline"
 
     @property
@@ -167,6 +173,7 @@ class EstofexLocalLevelSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Local Level"
     _attr_unique_id = "estofex_local_level"
+    _attr_translation_key = "local_level"
     _attr_icon = "mdi:alert"
 
     @property
@@ -198,6 +205,7 @@ class EstofexLocalSummarySensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Local Summary"
     _attr_unique_id = "estofex_local_summary"
+    _attr_translation_key = "local_summary"
     _attr_icon = "mdi:text-box-search-outline"
 
     @property
@@ -228,6 +236,7 @@ class EstofexSummaryNlSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Summary NL"
     _attr_unique_id = "estofex_summary_nl"
+    _attr_translation_key = "summary_nl"
     _attr_icon = "mdi:text-box-check-outline"
 
     @property
@@ -260,6 +269,7 @@ class EstofexDiscussionNlSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Discussion NL"
     _attr_unique_id = "estofex_discussion_nl"
+    _attr_translation_key = "discussion_nl"
     _attr_icon = "mdi:translate"
 
     @property
@@ -292,6 +302,7 @@ class EstofexLastCheckedSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Last Checked"
     _attr_unique_id = "estofex_last_checked"
+    _attr_translation_key = "last_checked"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -306,6 +317,7 @@ class EstofexLastSuccessfulUpdateSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Last Successful Update"
     _attr_unique_id = "estofex_last_successful_update"
+    _attr_translation_key = "last_successful_update"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -320,6 +332,7 @@ class EstofexLastChangedSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Last Changed"
     _attr_unique_id = "estofex_last_changed"
+    _attr_translation_key = "last_changed"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -334,6 +347,7 @@ class EstofexImageDownloadedSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Image Downloaded"
     _attr_unique_id = "estofex_image_downloaded"
+    _attr_translation_key = "image_downloaded"
     _attr_icon = "mdi:image-sync"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -357,6 +371,7 @@ class EstofexHttpStatusSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "HTTP Status"
     _attr_unique_id = "estofex_http_status"
+    _attr_translation_key = "http_status"
     _attr_icon = "mdi:web-check"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -380,6 +395,7 @@ class EstofexStatusSensor(EstofexEntity, SensorEntity):
 
     _attr_name = "Status"
     _attr_unique_id = "estofex_status"
+    _attr_translation_key = "status"
     _attr_icon = "mdi:cloud-sync"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 

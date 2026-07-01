@@ -78,6 +78,7 @@ class EstofexLocalWarningBinarySensor(EstofexEntity, BinarySensorEntity):
 
     _attr_name = "Local Warning"
     _attr_unique_id = "estofex_local_warning"
+    _attr_translation_key = "local_warning"
     _attr_icon = "mdi:map-marker-alert"
 
     @property
@@ -108,6 +109,7 @@ class EstofexForecastChangedBinarySensor(EstofexEntity, BinarySensorEntity):
 
     _attr_name = "Forecast Changed"
     _attr_unique_id = "estofex_forecast_changed"
+    _attr_translation_key = "forecast_changed"
     _attr_icon = "mdi:file-sync"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -132,6 +134,7 @@ class EstofexHazardBinarySensor(EstofexEntity, BinarySensorEntity):
         self._hazard_type = hazard_type
         self._attr_name = name
         self._attr_unique_id = unique_id
+        self._attr_translation_key = hazard_type
         self._attr_icon = "mdi:alert-outline"
 
     @property

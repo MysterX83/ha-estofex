@@ -7,13 +7,11 @@ import logging
 from pathlib import Path
 from time import monotonic
 
-from aiohttp import ClientError
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .api import EstofexApiClient
 from .const import (
-    BASE_URL,
     DEFAULT_SCAN_INTERVAL_HOURS,
     EVENT_FORECAST_UPDATED,
     EVENT_WARNING_CLEARED,
@@ -21,14 +19,12 @@ from .const import (
     LATEST_IMAGE_FILENAME,
     WWW_DIR,
 )
-from .downloader import EstofexDownloader
-from .geometry import point_in_polygon
+from .exceptions import EstofexConnectionError, EstofexParseError
+from .geometry import evaluate_location_warning
 from .models import (
     EstofexDiagnostics,
     EstofexForecast,
-    EstofexHazard,
     EstofexLocalWarning,
-    EstofexPolygon,
 )
 from .parser import PARSER_VERSION, parse_estofex_forecast, parse_latest_forecast_id
 from .translator import async_summarize_to_dutch, async_translate_to_dutch
@@ -53,7 +49,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             name="ESTOFEX",
             update_interval=timedelta(hours=DEFAULT_SCAN_INTERVAL_HOURS),
         )
-        self._downloader = EstofexDownloader(hass)
+        self._api = EstofexApiClient(hass)
         self.status = STATUS_UPDATING
         self.last_checked: datetime | None = None
         self.last_successful_update: datetime | None = None
@@ -77,8 +73,10 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
         try:
             forecast = await self._async_refresh_forecast(previous)
-        except (ClientError, TimeoutError) as err:
+        except EstofexConnectionError as err:
             forecast = self._handle_offline(err, previous)
+        except EstofexParseError as err:
+            forecast = self._handle_error(err, previous)
         except Exception as err:
             forecast = self._handle_error(err, previous)
 
@@ -116,11 +114,11 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
     ) -> EstofexForecast:
         """Refresh the forecast from ESTOFEX."""
         _LOGGER.debug("Checking ESTOFEX for latest forecast")
-        list_response = await self._downloader.async_get_text(self._list_url())
+        list_response = await self._api.async_fetch_forecast_list()
         self.last_http_status = list_response.status
         self.last_list_http_status = list_response.status
 
-        fcstfile = parse_latest_forecast_id(list_response.body)
+        fcstfile = self._parse_latest_forecast_id(list_response.body)
         if not fcstfile:
             return await self._async_handle_no_forecast()
 
@@ -134,7 +132,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         """Clear local forecast state when ESTOFEX has no active forecast."""
         _LOGGER.debug("No forecast available")
         try:
-            await self._downloader.async_remove_file(self._latest_image_path())
+            await self._async_remove_latest_image()
         except OSError as err:
             self.last_error = str(err)
             self._set_status(STATUS_ERROR)
@@ -153,7 +151,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         map_available = previous.map_available
         self.forecast_source_url = (
             previous.diagnostics.forecast_source_url
-            or self._forecast_source_url(previous.id or "")
+            or self._api.forecast_source_url(previous.id or "")
         )
 
         if not map_available:
@@ -172,27 +170,25 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
             map_available=map_available,
             local_map_url=self._local_map_url() if map_available else None,
             local_map_path=str(self._latest_image_path()) if map_available else None,
-            map_url=self._map_url(previous.id) if previous.id else previous.map_url,
+            map_url=(
+                self._api.forecast_map_url(previous.id)
+                if previous.id
+                else previous.map_url
+            ),
         )
 
     async def _async_handle_new_forecast(self, fcstfile: str) -> EstofexForecast:
         """Fetch, parse, and cache a new ESTOFEX forecast."""
-        source_url = self._forecast_source_url(fcstfile)
-        map_url = self._map_url(fcstfile)
-        self.forecast_source_url = source_url
+        map_url = self._api.forecast_map_url(fcstfile)
+        self.forecast_source_url = self._api.forecast_source_url(fcstfile)
 
         _LOGGER.debug("Downloading new forecast source: %s", fcstfile)
-        source_response = await self._downloader.async_get_text(source_url)
+        source_response = await self._api.async_fetch_forecast_source(fcstfile)
         self.last_http_status = source_response.status
         self.last_forecast_http_status = source_response.status
+        self.forecast_source_url = source_response.url
 
-        forecast = parse_estofex_forecast(
-            source_response.body,
-            fcstfile,
-            map_url=map_url,
-            local_map_url=None,
-            local_map_path=None,
-        )
+        forecast = self._parse_forecast_source(source_response.body, fcstfile, map_url)
 
         discussion_nl = await async_translate_to_dutch(self.hass, forecast.discussion)
         summary_nl = await async_summarize_to_dutch(self.hass, forecast.discussion)
@@ -220,9 +216,10 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
     async def _async_download_map(self, fcstfile: str) -> None:
         """Download and cache the forecast map."""
-        image_response = await self._downloader.async_download_file(
-            self._map_url(fcstfile),
-            self._latest_image_path(),
+        image_response = await self._api.async_fetch_forecast_map(fcstfile)
+        await self.hass.async_add_executor_job(
+            self._write_latest_image,
+            image_response.body,
         )
         self.image_downloaded = True
         self.last_http_status = image_response.status
@@ -255,7 +252,11 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         """Attach local warning evaluation and runtime diagnostics."""
         forecast = replace(
             forecast,
-            local_warning=self._evaluate_local_warning(forecast),
+            local_warning=evaluate_location_warning(
+                self.hass.config.latitude,
+                self.hass.config.longitude,
+                forecast.polygons,
+            ),
         )
         return replace(
             forecast,
@@ -271,46 +272,6 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
                 forecast_source_url=self.forecast_source_url,
             ),
         )
-
-    def _evaluate_local_warning(self, forecast: EstofexForecast) -> EstofexLocalWarning:
-        """Evaluate the Home Assistant location against forecast polygons."""
-        if not forecast.id:
-            return EstofexLocalWarning()
-
-        latitude = self.hass.config.latitude
-        longitude = self.hass.config.longitude
-        if latitude is None or longitude is None:
-            return EstofexLocalWarning()
-
-        matching = [
-            polygon
-            for polygon in forecast.polygons
-            if point_in_polygon(latitude, longitude, polygon.coordinates)
-        ]
-        if not matching:
-            return EstofexLocalWarning()
-
-        best_polygon = max(
-            matching,
-            key=lambda polygon: (polygon.level_number, len(polygon.hazards)),
-        )
-        return EstofexLocalWarning(
-            active=True,
-            level=best_polygon.level,
-            hazards=self._unique_hazards(matching),
-            polygon=best_polygon,
-        )
-
-    @staticmethod
-    def _unique_hazards(
-        polygons: list[EstofexPolygon],
-    ) -> tuple[EstofexHazard, ...]:
-        """Return de-duplicated hazards from matching polygons."""
-        hazards: dict[str, EstofexHazard] = {}
-        for polygon in polygons:
-            for hazard in polygon.hazards:
-                hazards.setdefault(hazard.type, hazard)
-        return tuple(hazards.values())
 
     def _fire_transition_events(
         self,
@@ -391,24 +352,53 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         return Path(self.hass.config.path(WWW_DIR)) / LATEST_IMAGE_FILENAME
 
     @staticmethod
-    def _list_url() -> str:
-        """Return the ESTOFEX forecast list URL."""
-        return f"{BASE_URL}?list=yes"
-
-    @staticmethod
-    def _forecast_source_url(fcstfile: str) -> str:
-        """Return the ESTOFEX XML source URL."""
-        return f"{BASE_URL}?xml=yes&fcstfile={fcstfile}"
-
-    @staticmethod
-    def _map_url(fcstfile: str) -> str:
-        """Return the ESTOFEX map URL."""
-        return f"{BASE_URL}?lightningmap=yes&fcstfile={fcstfile}"
-
-    @staticmethod
     def _local_map_url() -> str:
         """Return the local Home Assistant map URL."""
         return f"/local/estofex/{LATEST_IMAGE_FILENAME}"
+
+    async def _async_remove_latest_image(self) -> None:
+        """Remove the cached forecast map if it exists."""
+        await self.hass.async_add_executor_job(self._remove_latest_image_file)
+
+    def _write_latest_image(self, data: bytes) -> None:
+        """Write the latest forecast map to disk."""
+        image_path = self._latest_image_path()
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(data)
+
+    def _remove_latest_image_file(self) -> None:
+        """Remove the cached forecast map from disk."""
+        image_path = self._latest_image_path()
+        if image_path.exists():
+            image_path.unlink()
+
+    @staticmethod
+    def _parse_latest_forecast_id(html: str) -> str | None:
+        """Parse the latest forecast id, raising a domain error on failure."""
+        try:
+            return parse_latest_forecast_id(html)
+        except Exception as err:
+            raise EstofexParseError("Could not parse ESTOFEX forecast list") from err
+
+    @staticmethod
+    def _parse_forecast_source(
+        source: str,
+        fcstfile: str,
+        map_url: str,
+    ) -> EstofexForecast:
+        """Parse a forecast source, raising a domain error on failure."""
+        try:
+            return parse_estofex_forecast(
+                source,
+                fcstfile,
+                map_url=map_url,
+                local_map_url=None,
+                local_map_path=None,
+            )
+        except Exception as err:
+            raise EstofexParseError(
+                f"Could not parse ESTOFEX forecast source {fcstfile}"
+            ) from err
 
     @staticmethod
     def _forecast_age_seconds(forecast: EstofexForecast) -> int | None:
