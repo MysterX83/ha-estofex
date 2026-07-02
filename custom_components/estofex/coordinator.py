@@ -1,4 +1,5 @@
 """Data coordinator for ESTOFEX."""
+
 from __future__ import annotations
 
 import logging

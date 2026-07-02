@@ -1,4 +1,5 @@
 """Parsing helpers for ESTOFEX forecast sources."""
+
 from __future__ import annotations
 
 import re
@@ -108,9 +109,7 @@ class _BulletinHTMLParser(HTMLParser):
         self._current: list[str] = []
         self._title_parts: list[str] = []
 
-    def handle_starttag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         """Handle relevant start tags."""
         tag = tag.lower()
         attr_map = {key.lower(): value or "" for key, value in attrs}
@@ -296,9 +295,7 @@ def _parse_polygons(
                 level=level,
                 coordinates=coordinates,
                 hazards=polygon_hazards,
-                region=_region_from_description(
-                    descriptions_by_level.get(level or "")
-                ),
+                region=_region_from_description(descriptions_by_level.get(level or "")),
                 description=descriptions_by_level.get(level or ""),
                 risk_type=risk_type,
             )
@@ -396,7 +393,9 @@ def _hazards_by_level(
             continue
         hazards_by_level.setdefault(level, [])
         for hazard in _extract_hazards(level_text):
-            if hazard.type not in {existing.type for existing in hazards_by_level[level]}:
+            if hazard.type not in {
+                existing.type for existing in hazards_by_level[level]
+            }:
                 hazards_by_level[level].append(hazard)
 
     return {
@@ -442,9 +441,7 @@ def _extract_level_texts(body_text: str | None) -> tuple[str, ...]:
         lead_text = body_text[: section_match.start()]
 
     return tuple(
-        block
-        for block in _split_blocks(lead_text)
-        if _LEVEL_TEXT_RE.search(block)
+        block for block in _split_blocks(lead_text) if _LEVEL_TEXT_RE.search(block)
     )
 
 

@@ -1,4 +1,5 @@
 """Geometry helpers for ESTOFEX polygons."""
+
 from __future__ import annotations
 
 from .models import EstofexHazard, EstofexLocalWarning, EstofexPolygon
@@ -68,9 +69,9 @@ def point_in_polygon(
 
         crosses = (current_y > point_y) != (previous_y > point_y)
         if crosses:
-            intersect_x = (previous_x - current_x) * (
-                point_y - current_y
-            ) / (previous_y - current_y) + current_x
+            intersect_x = (previous_x - current_x) * (point_y - current_y) / (
+                previous_y - current_y
+            ) + current_x
             if point_x < intersect_x:
                 inside = not inside
 
@@ -124,17 +125,13 @@ def _point_on_segment(
     end_y: float,
 ) -> bool:
     """Return whether a point lies on a line segment."""
-    cross_product = (point_y - start_y) * (end_x - start_x) - (
-        point_x - start_x
-    ) * (end_y - start_y)
+    cross_product = (point_y - start_y) * (end_x - start_x) - (point_x - start_x) * (
+        end_y - start_y
+    )
     if abs(cross_product) > _EPSILON:
         return False
 
     return (
-        min(start_x, end_x) - _EPSILON
-        <= point_x
-        <= max(start_x, end_x) + _EPSILON
-        and min(start_y, end_y) - _EPSILON
-        <= point_y
-        <= max(start_y, end_y) + _EPSILON
+        min(start_x, end_x) - _EPSILON <= point_x <= max(start_x, end_x) + _EPSILON
+        and min(start_y, end_y) - _EPSILON <= point_y <= max(start_y, end_y) + _EPSILON
     )

@@ -1,4 +1,5 @@
 """Button platform for ESTOFEX."""
+
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity

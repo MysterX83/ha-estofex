@@ -1,4 +1,5 @@
 """Test helpers for loading ESTOFEX modules without Home Assistant."""
+
 from __future__ import annotations
 
 import importlib.util

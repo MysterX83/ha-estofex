@@ -1,4 +1,5 @@
 """Domain-specific exceptions for ESTOFEX."""
+
 from __future__ import annotations
 
 

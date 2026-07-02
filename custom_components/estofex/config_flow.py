@@ -1,4 +1,5 @@
 """Config flow for ESTOFEX."""
+
 from __future__ import annotations
 
 from homeassistant import config_entries

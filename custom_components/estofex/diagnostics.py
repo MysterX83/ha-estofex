@@ -1,4 +1,5 @@
 """Diagnostics support for ESTOFEX."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -32,9 +33,7 @@ async def async_get_config_entry_diagnostics(
         "valid_from": _format_datetime(forecast.valid_from if forecast else None),
         "valid_until": _format_datetime(forecast.valid_until if forecast else None),
         "last_checked": _format_datetime(coordinator.last_checked),
-        "last_successful_update": _format_datetime(
-            coordinator.last_successful_update
-        ),
+        "last_successful_update": _format_datetime(coordinator.last_successful_update),
         "last_changed": _format_datetime(coordinator.last_changed),
         "forecast_source_url": coordinator.forecast_source_url,
         "last_http_status": coordinator.last_http_status,
@@ -47,12 +46,8 @@ async def async_get_config_entry_diagnostics(
         "map_available": forecast.map_available if forecast else False,
         "polygons": len(forecast.polygons) if forecast else 0,
         "hazards": [hazard.type for hazard in forecast.hazards] if forecast else [],
-        "local_warning": (
-            forecast.local_warning.active if forecast else False
-        ),
-        "parser_version": (
-            forecast.diagnostics.parser_version if forecast else None
-        ),
+        "local_warning": (forecast.local_warning.active if forecast else False),
+        "parser_version": (forecast.diagnostics.parser_version if forecast else None),
         "last_error": coordinator.last_error,
     }
 

@@ -1,4 +1,5 @@
 """Tests for ESTOFEX parser helpers."""
+
 from __future__ import annotations
 
 from .helpers import load_estofex_module

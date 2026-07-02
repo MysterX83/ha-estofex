@@ -1,4 +1,5 @@
 """ESTOFEX API client."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -50,16 +51,12 @@ class EstofexApiClient:
         url = self.forecast_source_url(fcstfile)
         return await self._async_get_text(url)
 
-    async def async_fetch_forecast_page(
-        self, fcstfile: str
-    ) -> EstofexApiTextResponse:
+    async def async_fetch_forecast_page(self, fcstfile: str) -> EstofexApiTextResponse:
         """Fetch the ESTOFEX HTML forecast page."""
         url = self.forecast_page_url(fcstfile)
         return await self._async_get_text(url)
 
-    async def async_fetch_forecast_map(
-        self, fcstfile: str
-    ) -> EstofexApiBytesResponse:
+    async def async_fetch_forecast_map(self, fcstfile: str) -> EstofexApiBytesResponse:
         """Fetch the ESTOFEX forecast map image."""
         url = self.forecast_map_url(fcstfile)
         return await self._async_get_bytes(url)
@@ -98,9 +95,7 @@ class EstofexApiClient:
                 return EstofexApiTextResponse(
                     body=body,
                     status=status,
-                    size=len(
-                        body.encode(response.charset or "utf-8", errors="ignore")
-                    ),
+                    size=len(body.encode(response.charset or "utf-8", errors="ignore")),
                     url=str(response.url),
                 )
         except EstofexConnectionError:

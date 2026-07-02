@@ -1,4 +1,5 @@
 """Domain models for ESTOFEX forecasts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -63,8 +64,7 @@ class EstofexPolygon:
             "description": self.description,
             "hazards": [hazard.label for hazard in self.hazards],
             "coordinates": [
-                {"latitude": lat, "longitude": lon}
-                for lat, lon in self.coordinates
+                {"latitude": lat, "longitude": lon} for lat, lon in self.coordinates
             ],
         }
 
@@ -231,7 +231,9 @@ class EstofexForecast:
 
 def _highest_level(polygons: tuple[EstofexPolygon, ...]) -> str | None:
     """Return the highest warning level from a sequence of polygons."""
-    level_polygon = max(polygons, key=lambda polygon: polygon.level_number, default=None)
+    level_polygon = max(
+        polygons, key=lambda polygon: polygon.level_number, default=None
+    )
     if not level_polygon or level_polygon.level_number == 0:
         return None
     return level_polygon.level
