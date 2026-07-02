@@ -1,9 +1,9 @@
 """Data coordinator for ESTOFEX."""
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import datetime, timedelta, timezone
 import logging
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 
@@ -99,7 +99,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
     def _prepare_update_cycle(self) -> None:
         """Reset per-cycle diagnostics."""
-        self.last_checked = datetime.now(timezone.utc)
+        self.last_checked = datetime.now(UTC)
         self.image_downloaded = False
         self.last_http_status = None
         self.last_list_http_status = None
@@ -157,7 +157,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         if not map_available:
             _LOGGER.debug("Cached forecast map missing, downloading current map")
             await self._async_download_map(previous.id or "")
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             self.last_successful_update = now
             self.last_image_downloaded = now
             map_available = True
@@ -195,7 +195,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
         _LOGGER.debug("Downloading new forecast map: %s", fcstfile)
         await self._async_download_map(fcstfile)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.last_changed = now
         self.last_successful_update = now
         self.last_image_downloaded = now
@@ -405,7 +405,7 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         """Return forecast age in seconds."""
         if not forecast.issued_at:
             return None
-        return int((datetime.now(timezone.utc) - forecast.issued_at).total_seconds())
+        return int((datetime.now(UTC) - forecast.issued_at).total_seconds())
 
     @staticmethod
     def _format_datetime(value: datetime | None) -> str | None:

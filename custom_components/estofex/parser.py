@@ -1,10 +1,10 @@
 """Parsing helpers for ESTOFEX forecast sources."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import re
+from datetime import UTC, datetime
 from html import unescape
 from html.parser import HTMLParser
-import re
 
 from .models import (
     HAZARD_EXCESSIVE_RAIN,
@@ -567,7 +567,7 @@ def _parse_compact_datetime(value: str | None, has_minutes: bool) -> datetime | 
         return None
     date_format = "%Y%m%d%H%M" if has_minutes else "%Y%m%d%H"
     try:
-        return datetime.strptime(value, date_format).replace(tzinfo=timezone.utc)
+        return datetime.strptime(value, date_format).replace(tzinfo=UTC)
     except ValueError:
         return None
 
@@ -577,7 +577,7 @@ def _parse_estofex_datetime(value: str) -> datetime | None:
     value = _flatten(value)
     for date_format in ("%a %d %b %Y %H:%M", "%d %b %Y %H:%M"):
         try:
-            return datetime.strptime(value, date_format).replace(tzinfo=timezone.utc)
+            return datetime.strptime(value, date_format).replace(tzinfo=UTC)
         except ValueError:
             continue
     return None

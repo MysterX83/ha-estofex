@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-
 HAZARD_LARGE_HAIL = "large_hail"
 HAZARD_SEVERE_WIND = "severe_wind"
 HAZARD_EXCESSIVE_RAIN = "excessive_rain"

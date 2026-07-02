@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aiohttp import ClientError
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 

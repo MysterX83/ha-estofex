@@ -15,10 +15,10 @@ from .entity import EstofexEntity
 from .models import (
     HAZARD_EXCESSIVE_RAIN,
     HAZARD_FLASH_FLOOD,
+    HAZARD_LABELS,
     HAZARD_LARGE_HAIL,
     HAZARD_SEVERE_WIND,
     HAZARD_TORNADO,
-    HAZARD_LABELS,
 )
 
 

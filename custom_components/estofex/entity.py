@@ -1,15 +1,11 @@
 """Base entities for ESTOFEX."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-
-if TYPE_CHECKING:
-    from .coordinator import EstofexCoordinator
+from .coordinator import EstofexCoordinator
 
 
 class EstofexEntity(CoordinatorEntity[EstofexCoordinator]):
