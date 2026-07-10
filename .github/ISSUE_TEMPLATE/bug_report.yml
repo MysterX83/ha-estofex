@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a problem with the ESTOFEX integration.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue.
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.7.0"
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: ESTOFEX integration version
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and logs
+      description: Attach Home Assistant diagnostics or relevant logs. Remove secrets, tokens, private URLs, and precise location data first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I have restarted Home Assistant after installing or updating the integration.
+        - label: I checked `sensor.estofex_status`.
+        - label: I removed secrets and private data from logs and diagnostics.

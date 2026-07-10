@@ -24,4 +24,3 @@ known-first-party = ["custom_components.estofex"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"

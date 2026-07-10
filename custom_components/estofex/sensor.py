@@ -71,7 +71,6 @@ class EstofexForecastIdSensor(EstofexEntity, SensorEntity):
         return {
             "image_url": self.coordinator.data.image_url,
             "local_image_url": self.coordinator.data.local_image_url,
-            "local_map_path": self.coordinator.data.local_map_path,
             "changed": self.coordinator.data.changed,
             "map_available": self.coordinator.data.map_available,
         }

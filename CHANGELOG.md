@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [0.4.0] - 2026-06-30
+## [0.4.0] - 2026-07-10
 
 ### Added
 
@@ -13,17 +13,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Domain-specific API client and exception classes.
 - GitHub Actions CI for hassfest, Ruff, and pytest.
 - Basic pytest structure for parser and geometry behavior.
+- Built-in no-forecast placeholder image for the map camera.
+- Release metadata and documentation for custom HACS installation.
 
 ### Changed
 
 - Prepared project metadata for first public HACS/GitHub release.
 - Refined architecture around API, parser, coordinator, models, geometry, and entities.
 - Updated manifest version to `0.4.0`.
+- Treat expired ESTOFEX forecasts as no active forecast so stale maps are cleared.
 
 ### Notes
 
 - Dutch translation and summary hooks remain provider-free.
 - Mesoscale Discussions are modeled for future support but not fully implemented.
+- `sensor.estofex_image_downloaded` remains a diagnostic string sensor for v0.4.0; a binary sensor migration can be considered in a later release.
 
 ## [0.3.0] - 2026-06-30
 
