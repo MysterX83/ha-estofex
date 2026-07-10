@@ -21,6 +21,7 @@ Screenshots will be added before the first tagged public release.
 - Manual refresh button
 - Latest ESTOFEX forecast map as a camera entity
 - Local cached map at `/local/estofex/latest.png`
+- Built-in placeholder map when there is no active forecast
 - Forecast metadata sensors
 - Original ESTOFEX discussion parsing
 - Optional Dutch translation and summary abstraction, currently provider-free
@@ -138,7 +139,7 @@ Entity IDs can vary if Home Assistant has already created entities with the same
 | --- | --- |
 | `OK` | Forecast data is available |
 | `Updating` | Coordinator is currently refreshing |
-| `No forecast` | ESTOFEX is reachable, but no active storm forecast was found |
+| `No forecast` | ESTOFEX is reachable, but no active storm forecast was found, or the latest listed forecast has expired |
 | `Offline` | ESTOFEX is temporarily unreachable; previous data is preserved when available |
 | `Error` | Unexpected integration error |
 
@@ -210,10 +211,10 @@ entities:
 
 ## Troubleshooting
 
-### The camera is unavailable
+### The camera shows the placeholder map
 
 - Check `sensor.estofex_status`.
-- If the status is `No forecast`, ESTOFEX currently has no active forecast and the cached map is intentionally removed.
+- If the status is `No forecast`, ESTOFEX currently has no active forecast and the cached map is intentionally removed. The camera stays available and shows the bundled placeholder image.
 - If the status is `Offline`, ESTOFEX could not be reached. Existing data is preserved when available.
 
 ### Local warning never turns on
@@ -307,7 +308,7 @@ Temporary ESTOFEX outages should not erase useful existing data. The status chan
 
 ### Why is the map removed when there is no forecast?
 
-When ESTOFEX is reachable and reports no active forecast, an old map would be misleading. The cached map is removed and the camera becomes unavailable.
+When ESTOFEX is reachable and reports no active forecast, an old map would be misleading. The cached map is removed and the camera shows a bundled no-forecast placeholder until a new forecast is published.
 
 ## Contributing
 

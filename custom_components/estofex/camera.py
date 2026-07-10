@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, LATEST_IMAGE_FILENAME, WWW_DIR
+from .const import DOMAIN, LATEST_IMAGE_FILENAME, NO_FORECAST_IMAGE_FILENAME, WWW_DIR
 from .coordinator import EstofexCoordinator
 from .entity import EstofexEntity
 
@@ -40,8 +40,8 @@ class EstofexMapCamera(EstofexEntity, Camera):
 
     @property
     def available(self) -> bool:
-        """Return whether the camera has a forecast map to expose."""
-        return super().available and self.coordinator.has_forecast_map
+        """Return whether the camera can expose an image."""
+        return super().available
 
     @property
     def extra_state_attributes(self):
@@ -69,10 +69,15 @@ class EstofexMapCamera(EstofexEntity, Camera):
         height: int | None = None,
     ) -> bytes | None:
         """Return bytes of camera image."""
-        if not self.coordinator.has_forecast_map:
-            return None
-
-        image_path = Path(self._hass.config.path(WWW_DIR)) / LATEST_IMAGE_FILENAME
+        image_path = self._image_path()
         if not image_path.exists():
             return None
         return await self._hass.async_add_executor_job(image_path.read_bytes)
+
+    def _image_path(self) -> Path:
+        """Return the current forecast image or the bundled fallback image."""
+        if self.coordinator.has_forecast_map:
+            image_path = Path(self._hass.config.path(WWW_DIR)) / LATEST_IMAGE_FILENAME
+            if image_path.exists():
+                return image_path
+        return Path(__file__).with_name("assets") / NO_FORECAST_IMAGE_FILENAME

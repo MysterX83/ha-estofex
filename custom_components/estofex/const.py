@@ -11,3 +11,4 @@ EVENT_WARNING_CLEARED = "estofex_warning_cleared"
 
 WWW_DIR = "www/estofex"
 LATEST_IMAGE_FILENAME = "latest.png"
+NO_FORECAST_IMAGE_FILENAME = "no_forecast.png"
