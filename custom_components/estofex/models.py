@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 HAZARD_LARGE_HAIL = "large_hail"
 HAZARD_SEVERE_WIND = "severe_wind"
@@ -211,6 +211,12 @@ class EstofexForecast:
                 return level
         return None
 
+    def is_expired(self, now: datetime | None = None) -> bool:
+        """Return whether the forecast validity period has ended."""
+        if not self.valid_until:
+            return False
+        return _as_utc(self.valid_until) <= _as_utc(now or datetime.now(UTC))
+
     def local_summary(self) -> str:
         """Return a concise local forecast summary."""
         if not self.local_warning.active:
@@ -237,6 +243,13 @@ def _highest_level(polygons: tuple[EstofexPolygon, ...]) -> str | None:
     if not level_polygon or level_polygon.level_number == 0:
         return None
     return level_polygon.level
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Return a timezone-aware UTC datetime."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _level_sort_key(level: str | None) -> int:

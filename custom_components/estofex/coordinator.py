@@ -125,6 +125,9 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
 
         _LOGGER.debug("Forecast found: %s", fcstfile)
         if previous and previous.id == fcstfile:
+            if previous.is_expired():
+                _LOGGER.debug("Forecast expired: %s", previous.id)
+                return await self._async_handle_no_forecast()
             return await self._async_handle_unchanged_forecast(previous)
 
         return await self._async_handle_new_forecast(fcstfile)
@@ -190,6 +193,9 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexForecast]):
         self.forecast_source_url = source_response.url
 
         forecast = self._parse_forecast_source(source_response.body, fcstfile, map_url)
+        if forecast.is_expired():
+            _LOGGER.debug("Forecast expired: %s", fcstfile)
+            return await self._async_handle_no_forecast()
 
         discussion_nl = await async_translate_to_dutch(self.hass, forecast.discussion)
         summary_nl = await async_summarize_to_dutch(self.hass, forecast.discussion)
