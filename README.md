@@ -8,11 +8,9 @@ ESTOFEX is the European Storm Forecast Experiment. This custom integration polls
 
 ## Screenshots
 
-Screenshots will be added before the first tagged public release.
+### Home Assistant dashboard
 
-| Map camera | Local warning | Diagnostics |
-| --- | --- | --- |
-| _Placeholder_ | _Placeholder_ | _Placeholder_ |
+![ESTOFEX forecast map and warning entities in Home Assistant](docs/images/home-assistant-dashboard.png)
 
 ## Features
 
