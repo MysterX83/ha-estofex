@@ -4,7 +4,9 @@ Monitor ESTOFEX convective forecasts in Home Assistant, display the latest forec
 
 ESTOFEX is the European Storm Forecast Experiment. This custom integration polls public ESTOFEX forecast data, caches the current map locally, parses forecast metadata and discussion text, and evaluates whether the configured Home Assistant location is inside an ESTOFEX warning polygon.
 
-> This integration is not affiliated with ESTOFEX. Forecast data remains provided by ESTOFEX.
+> This integration is not affiliated with ESTOFEX. Forecast data is provided by ESTOFEX.
+
+The current release is [v0.4.0](https://github.com/MysterX83/ha-estofex/releases/tag/v0.4.0).
 
 ## Screenshots
 
@@ -14,21 +16,20 @@ ESTOFEX is the European Storm Forecast Experiment. This custom integration polls
 
 ## Features
 
-- Config Flow setup from the Home Assistant UI
+- Setup through the Home Assistant UI
 - Hourly polling through `DataUpdateCoordinator`
 - Manual refresh button
 - Latest ESTOFEX forecast map as a camera entity
-- Local cached map at `/local/estofex/latest.png`
+- Locally cached map at `/local/estofex/latest.png`
 - Built-in placeholder map when there is no active forecast
 - Forecast metadata sensors
 - Original ESTOFEX discussion parsing
-- Optional Dutch translation and summary abstraction, currently provider-free
+- Dutch translation and summary hooks (no provider is included in v0.4.0)
 - Polygon parsing from ESTOFEX XML source
 - Local warning detection using Home Assistant latitude/longitude
 - Hazard binary sensors for hail, wind, rain, tornado, and flash flooding
 - Home Assistant events for forecast and local warning transitions
 - Diagnostics support
-- Modular code layout for future Mesoscale Discussions, LightningMaps, ESWD, KNMI, and DWD support
 
 ## Installation
 
@@ -48,7 +49,7 @@ Until the repository is accepted as a default HACS repository, install it as a c
 5. Select category **Integration**.
 6. Install **ESTOFEX**.
 7. Restart Home Assistant.
-8. Add the integration from **Settings -> Devices & services -> Add integration -> ESTOFEX**.
+8. Add the integration from **Settings > Devices & services > Add integration > ESTOFEX**.
 
 ### Manual Installation
 
@@ -67,7 +68,7 @@ to:
 Restart Home Assistant, then add the integration from:
 
 ```text
-Settings -> Devices & services -> Add integration -> ESTOFEX
+Settings > Devices & services > Add integration > ESTOFEX
 ```
 
 ## Configuration
@@ -106,8 +107,8 @@ Entity IDs can vary if Home Assistant has already created entities with the same
 | `sensor.estofex_local_level` | Highest warning level for the Home Assistant location |
 | `sensor.estofex_local_summary` | Concise local warning summary |
 | `sensor.estofex_discussion` | Original ESTOFEX discussion state with text attributes |
-| `sensor.estofex_summary_nl` | Future Dutch summary state |
-| `sensor.estofex_discussion_nl` | Future Dutch translation state |
+| `sensor.estofex_summary_nl` | Dutch summary availability and text |
+| `sensor.estofex_discussion_nl` | Dutch translation availability and text |
 | `sensor.estofex_status` | Update status |
 | `sensor.estofex_last_checked` | Last update attempt |
 | `sensor.estofex_last_successful_update` | Last successful forecast/map update |
@@ -207,7 +208,7 @@ entities:
   - binary_sensor.estofex_flash_flood
 ```
 
-### Diagnostics
+### Diagnostics Entities
 
 ```yaml
 type: entities
@@ -236,7 +237,7 @@ entities:
 
 ### Forecast discussion is available but Dutch sensors are unavailable
 
-This is expected. The Dutch translation and summary abstraction exists, but no external AI provider is enabled or required in version 0.4.0.
+This is expected. The Dutch translation and summary hooks are present, but no external AI provider is included or required in v0.4.0.
 
 ### Manual update does not appear to download a new map
 
@@ -297,7 +298,7 @@ Entities do not make HTTP requests and do not parse ESTOFEX data. They only read
 
 - ESTOFEX forecasts are not official weather warnings.
 - Only one config entry is supported.
-- Dutch translation and summary sensors are provider-free placeholders in v0.4.0.
+- Dutch translation and summary sensors remain unavailable because v0.4.0 does not include a provider.
 - Mesoscale Discussions, LightningMaps, KNMI, DWD, ESWD, and a custom Lovelace card are not included in v0.4.0.
 - Hazard-to-region mapping is best-effort and depends on the structure of the public ESTOFEX bulletin text.
 
@@ -325,7 +326,7 @@ Entities do not make HTTP requests and do not parse ESTOFEX data. They only read
 
 ### Is AI required?
 
-No. The integration works without AI and makes no AI network calls in version 0.4.0.
+No. The integration works without AI and makes no AI network calls in v0.4.0.
 
 ### Does this replace official weather warnings?
 
@@ -341,60 +342,7 @@ When ESTOFEX is reachable and reports no active forecast, an old map would be mi
 
 ## Contributing
 
-Contributions are welcome.
-
-Recommended workflow:
-
-1. Fork the repository.
-2. Create a feature branch.
-3. Run local checks:
-
-   ```bash
-   python3 -m compileall custom_components/estofex
-   ruff check .
-   pytest
-   ```
-
-4. Open a pull request with a clear description.
-
-Please keep API, parsing, coordinator, and entity responsibilities separated.
-
-## Release Process
-
-Version `0.4.0` is prepared as the first public GitHub and custom HACS release. Do not create a tag or GitHub release until the final checks pass.
-
-Recommended release commands:
-
-```bash
-ruff check .
-ruff format --check .
-pytest
-python3 -m compileall custom_components/estofex
-python3 -m json.tool custom_components/estofex/manifest.json >/dev/null
-python3 -m json.tool hacs.json >/dev/null
-python3 -m json.tool custom_components/estofex/translations/en.json >/dev/null
-python3 -m json.tool custom_components/estofex/translations/nl.json >/dev/null
-git tag v0.4.0
-git push origin v0.4.0
-```
-
-Suggested GitHub release title:
-
-```text
-ESTOFEX 0.4.0
-```
-
-Suggested release notes:
-
-```markdown
-First public release of the ESTOFEX custom integration for Home Assistant.
-
-- Adds Config Flow setup, hourly polling, and manual refresh.
-- Provides a forecast map camera with a no-forecast placeholder.
-- Adds forecast metadata, status, diagnostics, local warning, and hazard entities.
-- Parses ESTOFEX forecast metadata, discussion text, polygons, and local warning state.
-- Includes HACS metadata, CI, tests, and release documentation.
-```
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance and required checks.
 
 ## License
 

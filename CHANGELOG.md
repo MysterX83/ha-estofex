@@ -18,7 +18,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Prepared project metadata for first public HACS/GitHub release.
+- Finalized project metadata for the first public HACS/GitHub release.
 - Refined architecture around API, parser, coordinator, models, geometry, and entities.
 - Updated manifest version to `0.4.0`.
 - Treat expired ESTOFEX forecasts as no active forecast so stale maps are cleared.
