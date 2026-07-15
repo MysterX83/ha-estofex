@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-07-15
+
+### Added
+
+- Support for all simultaneously active ESTOFEX forecasts with deterministic primary selection.
+- A compact active-forecast count sensor and dynamic map camera per active forecast.
+- Safe per-forecast map caching while retaining `/local/estofex/latest.png` for the primary camera.
+- Full sanitized discussion text and Markdown attributes on the discussion sensor.
+- A combined local thunderstorm-risk binary sensor for ESTOFEX levels 1, 2, and 3.
+- Multi-forecast diagnostics, event metadata, and mocked lifecycle/cache/offline tests.
+
+### Changed
+
+- Existing primary forecast sensors and camera now read the newest active forecast from an immutable collection model.
+- Local warning and hazard binary sensors combine matches across every active forecast.
+- Forecast-update events now react to additions, removals, and primary changes without polling-cycle event spam.
+- Per-forecast source, parsing, discussion, and map failures are isolated where usable data remains.
+
+### Compatibility
+
+- Preserved existing entity unique IDs, config entries, status values, events, update button, and primary map URL.
+- Preserved `text` and `original_text` as discussion attribute aliases; `discussion` and `discussion_markdown` are preferred.
+
 ## [0.4.0] - 2026-07-10
 
 ### Added

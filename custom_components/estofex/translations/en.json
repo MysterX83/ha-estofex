@@ -15,6 +15,9 @@
       "local_warning": {
         "name": "Local warning"
       },
+      "thunderstorm_risk": {
+        "name": "Thunderstorm risk"
+      },
       "forecast_changed": {
         "name": "Forecast changed"
       },
@@ -47,6 +50,9 @@
     "sensor": {
       "forecast_id": {
         "name": "Forecast ID"
+      },
+      "active_forecasts": {
+        "name": "Active forecasts"
       },
       "issued_at": {
         "name": "Issued at"

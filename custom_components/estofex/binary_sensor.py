@@ -39,6 +39,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             EstofexLocalWarningBinarySensor(coordinator),
+            EstofexThunderstormRiskBinarySensor(coordinator),
             EstofexForecastChangedBinarySensor(coordinator),
             EstofexHazardBinarySensor(
                 coordinator,
@@ -95,13 +96,75 @@ class EstofexLocalWarningBinarySensor(EstofexEntity, BinarySensorEntity):
             return {}
 
         warning = data.local_warning
+        forecast = next(
+            (
+                item
+                for item in data.forecasts
+                if item.id in warning.matching_forecast_ids
+            ),
+            data.primary_forecast,
+        )
         polygon = warning.polygon.as_attribute() if warning.polygon else None
         return {
             "level": warning.level,
             "hazards": warning.hazard_labels,
+            "matching_forecast_ids": list(warning.matching_forecast_ids),
             "polygon": polygon,
-            "issued_at": _format_timestamp(data.issued_at),
-            "valid_until": _format_timestamp(data.valid_until),
+            "issued_at": _format_timestamp(forecast.issued_at if forecast else None),
+            "valid_until": _format_timestamp(
+                forecast.valid_until if forecast else None
+            ),
+        }
+
+
+class EstofexThunderstormRiskBinarySensor(EstofexEntity, BinarySensorEntity):
+    """Whether any active ESTOFEX level 1-3 polygon affects the location."""
+
+    _attr_name = "Thunderstorm Risk"
+    _attr_unique_id = "estofex_thunderstorm_risk"
+    _attr_translation_key = "thunderstorm_risk"
+    _attr_icon = "mdi:weather-lightning"
+
+    @property
+    def is_on(self) -> bool:
+        """Return the combined local convective risk state."""
+        return bool(self.coordinator.data and self.coordinator.data.thunderstorm_risk)
+
+    @property
+    def extra_state_attributes(self):
+        """Return combined risk context from all matching forecasts."""
+        data = self.coordinator.data
+        if not data:
+            return {
+                "highest_level": None,
+                "matching_forecast_ids": [],
+                "forecast_count": 0,
+                "hazards": [],
+                "issued_at": None,
+                "valid_until": None,
+                "summary": "No local ESTOFEX thunderstorm risk.",
+            }
+
+        matching = data.thunderstorm_forecasts
+        primary_matching = matching[0] if matching else None
+        level = data.highest_thunderstorm_level
+        until = primary_matching.valid_until if primary_matching else None
+        summary = "No local ESTOFEX thunderstorm risk."
+        if level:
+            until_text = f" until {until:%H:%M} UTC" if until else ""
+            summary = f"Thunderstorm risk: ESTOFEX {level.lower()}{until_text}"
+        return {
+            "highest_level": level,
+            "matching_forecast_ids": [
+                forecast.id for forecast in matching if forecast.id
+            ],
+            "forecast_count": len(matching),
+            "hazards": [hazard.label for hazard in data.thunderstorm_hazards],
+            "issued_at": _format_timestamp(
+                primary_matching.issued_at if primary_matching else None
+            ),
+            "valid_until": _format_timestamp(until),
+            "summary": summary,
         }
 
 
@@ -150,9 +213,21 @@ class EstofexHazardBinarySensor(EstofexEntity, BinarySensorEntity):
         data = self.coordinator.data
         if not data:
             return {}
+        matching = tuple(
+            forecast
+            for forecast in data.forecasts
+            if forecast.local_warning.active
+            and self._hazard_type in forecast.local_warning.hazard_types
+        )
+        primary_matching = matching[0] if matching else data.primary_forecast
         return {
             "hazard": HAZARD_LABELS.get(self._hazard_type, self._hazard_type),
             "level": data.local_warning.level,
-            "forecast_id": data.id,
-            "valid_until": _format_timestamp(data.valid_until),
+            "forecast_id": primary_matching.id if primary_matching else None,
+            "matching_forecast_ids": [
+                forecast.id for forecast in matching if forecast.id
+            ],
+            "valid_until": _format_timestamp(
+                primary_matching.valid_until if primary_matching else None
+            ),
         }

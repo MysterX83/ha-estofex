@@ -14,11 +14,12 @@ from .models import (
     HAZARD_SEVERE_WIND,
     HAZARD_TORNADO,
     EstofexForecast,
+    EstofexForecastReference,
     EstofexHazard,
     EstofexPolygon,
 )
 
-PARSER_VERSION = "0.3.0"
+PARSER_VERSION = "0.5.0"
 
 _FCSTFILE_RE = re.compile(
     r"(?P<id>\d{10}_\d{12}_(?P<number>\d+)_(?:stormforecast|mesoscalediscussion)\.xml)",
@@ -108,10 +109,16 @@ class _BulletinHTMLParser(HTMLParser):
         self._in_title = False
         self._current: list[str] = []
         self._title_parts: list[str] = []
+        self._ignored_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         """Handle relevant start tags."""
         tag = tag.lower()
+        if tag in {"script", "style"}:
+            self._ignored_depth += 1
+            return
+        if self._ignored_depth:
+            return
         attr_map = {key.lower(): value or "" for key, value in attrs}
         classes = attr_map.get("class", "").lower().split()
 
@@ -131,6 +138,11 @@ class _BulletinHTMLParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         """Handle relevant end tags."""
         tag = tag.lower()
+        if tag in {"script", "style"} and self._ignored_depth:
+            self._ignored_depth -= 1
+            return
+        if self._ignored_depth:
+            return
 
         if tag == "div" and self._in_title:
             title = _normalize_text("".join(self._title_parts))
@@ -139,23 +151,44 @@ class _BulletinHTMLParser(HTMLParser):
             return
 
         if tag == "p" and self._in_bulletin:
-            text = _normalize_text("".join(self._current))
+            text = _sanitize_visible_text("".join(self._current))
             if text:
                 self.bulletins.append(text)
             self._in_bulletin = False
 
     def handle_data(self, data: str) -> None:
         """Collect text data for active elements."""
+        if self._ignored_depth:
+            return
         if self._in_bulletin:
             self._current.append(data)
         elif self._in_title:
             self._title_parts.append(data)
 
 
+def parse_forecast_entries(html: str) -> tuple[EstofexForecastReference, ...]:
+    """Extract every unique storm forecast reference from the list page."""
+    entries: list[EstofexForecastReference] = []
+    seen: set[str] = set()
+    for forecast_id in _STORM_FCSTFILE_RE.findall(html):
+        forecast_id = unescape(forecast_id)
+        if forecast_id in seen:
+            continue
+        seen.add(forecast_id)
+        entries.append(
+            EstofexForecastReference(
+                forecast_id=forecast_id,
+                issued_at=_parse_fcstfile_issued_at(forecast_id),
+                valid_until=_parse_fcstfile_valid_until(forecast_id),
+            )
+        )
+    return tuple(entries)
+
+
 def parse_latest_forecast_id(html: str) -> str | None:
-    """Extract the newest storm forecast id from the ESTOFEX list page."""
-    matches = _STORM_FCSTFILE_RE.findall(html)
-    return matches[0] if matches else None
+    """Return the first storm forecast id for backward compatibility."""
+    entries = parse_forecast_entries(html)
+    return entries[0].forecast_id if entries else None
 
 
 def parse_estofex_forecast(
@@ -166,6 +199,7 @@ def parse_estofex_forecast(
     local_map_path: str | None = None,
     discussion_nl: str | None = None,
     summary_nl: str | None = None,
+    source_url: str | None = None,
 ) -> EstofexForecast:
     """Parse an ESTOFEX XML-ish or HTML source into a forecast model."""
     if "<forecast" in source.lower() and "<area" in source.lower():
@@ -177,6 +211,7 @@ def parse_estofex_forecast(
             local_map_path,
             discussion_nl,
             summary_nl,
+            source_url,
         )
 
     return _parse_html_forecast(
@@ -187,6 +222,7 @@ def parse_estofex_forecast(
         local_map_path,
         discussion_nl,
         summary_nl,
+        source_url,
     )
 
 
@@ -198,6 +234,7 @@ def _parse_xmlish_forecast(
     local_map_path: str | None,
     discussion_nl: str | None,
     summary_nl: str | None,
+    source_url: str | None,
 ) -> EstofexForecast:
     """Parse ESTOFEX's XML-like forecast response."""
     discussion = _extract_xmlish_text(source)
@@ -220,6 +257,7 @@ def _parse_xmlish_forecast(
         map_url=map_url,
         local_map_url=local_map_url,
         local_map_path=local_map_path,
+        source_url=source_url,
         polygons=_parse_polygons(source, hazards, hazards_by_level, level_texts),
         hazards=hazards,
         level_texts=level_texts,
@@ -234,6 +272,7 @@ def _parse_html_forecast(
     local_map_path: str | None,
     discussion_nl: str | None,
     summary_nl: str | None,
+    source_url: str | None,
 ) -> EstofexForecast:
     """Parse the HTML text endpoint as a fallback source."""
     parser = _BulletinHTMLParser()
@@ -263,6 +302,7 @@ def _parse_html_forecast(
         map_url=map_url,
         local_map_url=local_map_url,
         local_map_path=local_map_path,
+        source_url=source_url,
         hazards=hazards,
         level_texts=level_texts,
     )
@@ -341,8 +381,18 @@ def _extract_xmlish_text(source: str) -> str | None:
     match = re.search(r"<text>(?P<text>.*?)</text>", source, re.IGNORECASE | re.DOTALL)
     if not match:
         return None
-    text = re.sub(r"<br\s*/?>", "\n", match.group("text"), flags=re.IGNORECASE)
-    return _normalize_text(re.sub(r"<[^>]+>", "", text))
+    text = unescape(match.group("text"))
+    text = re.sub(
+        r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"</?(?:p|div|h[1-6]|li|ul|ol)\b[^>]*>", "\n", text, flags=re.IGNORECASE
+    )
+    return _normalize_text(re.sub(r"<[^>]+>", "", text)) or None
 
 
 def _tag_value(source: str, tag: str) -> str | None:
@@ -587,7 +637,14 @@ def _split_blocks(text: str) -> list[str]:
 
 def _text_fallback(html: str) -> str:
     """Return a simple tag-stripped fallback for non-standard responses."""
-    return _normalize_text(re.sub(r"<[^>]+>", "\n", html))
+    html = unescape(html)
+    cleaned = re.sub(
+        r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>",
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _normalize_text(re.sub(r"<[^>]+>", "\n", cleaned))
 
 
 def _flatten(text: str) -> str:
@@ -616,3 +673,15 @@ def _normalize_text(text: str) -> str:
         previous_blank = False
 
     return "\n".join(normalized).strip()
+
+
+def _sanitize_visible_text(text: str) -> str:
+    """Normalize visible text and remove decoded external markup."""
+    text = unescape(text)
+    text = re.sub(
+        r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _normalize_text(re.sub(r"<[^>]+>", "", text))

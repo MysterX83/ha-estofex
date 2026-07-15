@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -99,6 +100,19 @@ class EstofexLocalWarning:
     level: str | None = None
     hazards: tuple[EstofexHazard, ...] = ()
     polygon: EstofexPolygon | None = None
+    matching_forecast_ids: tuple[str, ...] = ()
+
+    @property
+    def is_warning(self) -> bool:
+        """Return the warning state using domain terminology."""
+        return self.active
+
+    @property
+    def level_number(self) -> int:
+        """Return the normalized numeric warning level."""
+        if self.polygon:
+            return self.polygon.level_number
+        return _level_number(self.level)
 
     @property
     def hazard_types(self) -> set[str]:
@@ -150,6 +164,7 @@ class EstofexForecast:
     map_url: str | None
     local_map_url: str | None
     local_map_path: str | None
+    source_url: str | None = None
     polygons: tuple[EstofexPolygon, ...] = ()
     hazards: tuple[EstofexHazard, ...] = ()
     mesoscale_discussions: tuple[EstofexMesoscaleDiscussion, ...] = ()
@@ -188,6 +203,17 @@ class EstofexForecast:
         return self.discussion
 
     @property
+    def discussion_markdown(self) -> str | None:
+        """Return safe Markdown derived from the normalized plain text."""
+        if not self.discussion:
+            return None
+        lines = [
+            f"## {line.title()}" if line.upper() in {"SYNOPSIS", "DISCUSSION"} else line
+            for line in self.discussion.splitlines()
+        ]
+        return "\n".join(lines)
+
+    @property
     def levels_present(self) -> tuple[str, ...]:
         """Return warning levels present in the forecast."""
         levels = {
@@ -217,6 +243,15 @@ class EstofexForecast:
             return False
         return _as_utc(self.valid_until) <= _as_utc(now or datetime.now(UTC))
 
+    def is_active(self, now: datetime | None = None) -> bool:
+        """Return whether this forecast is active at the supplied UTC time."""
+        if not self.valid_until:
+            return False
+        current = _as_utc(now or datetime.now(UTC))
+        if current >= _as_utc(self.valid_until):
+            return False
+        return self.issued_at is None or _as_utc(self.issued_at) <= current
+
     def local_summary(self) -> str:
         """Return a concise local forecast summary."""
         if not self.local_warning.active:
@@ -233,6 +268,137 @@ class EstofexForecast:
         if self.valid_until:
             lines.append(f"Valid until {self.valid_until:%H} UTC")
         return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class EstofexForecastReference:
+    """A forecast-list entry with enough metadata for activity filtering."""
+
+    forecast_id: str
+    issued_at: datetime | None
+    valid_until: datetime | None
+
+    def is_active(self, now: datetime | None = None) -> bool:
+        """Return whether the referenced forecast may currently be active."""
+        if not self.valid_until:
+            return False
+        current = _as_utc(now or datetime.now(UTC))
+        if current >= _as_utc(self.valid_until):
+            return False
+        return self.issued_at is None or _as_utc(self.issued_at) <= current
+
+
+@dataclass(frozen=True, slots=True)
+class EstofexUpdateData:
+    """Immutable data for all active ESTOFEX forecasts in one update cycle."""
+
+    forecasts: tuple[EstofexForecast, ...] = ()
+    primary_forecast_id: str | None = None
+    added_forecast_ids: tuple[str, ...] = ()
+    removed_forecast_ids: tuple[str, ...] = ()
+    changed: bool = False
+
+    def __post_init__(self) -> None:
+        """Normalize forecast order and primary selection."""
+        forecasts = tuple(sorted(self.forecasts, key=_forecast_sort_key, reverse=True))
+        if forecasts != self.forecasts:
+            object.__setattr__(self, "forecasts", forecasts)
+
+        ids = {forecast.id for forecast in forecasts if forecast.id}
+        primary_id = self.primary_forecast_id
+        if primary_id not in ids:
+            primary_id = forecasts[0].id if forecasts else None
+            object.__setattr__(self, "primary_forecast_id", primary_id)
+
+    @property
+    def primary_forecast(self) -> EstofexForecast | None:
+        """Return the newest active forecast."""
+        return self.get_forecast(self.primary_forecast_id)
+
+    def get_forecast(self, forecast_id: str | None) -> EstofexForecast | None:
+        """Find an active forecast by id."""
+        if not forecast_id:
+            return None
+        return next(
+            (forecast for forecast in self.forecasts if forecast.id == forecast_id),
+            None,
+        )
+
+    @property
+    def forecast_count(self) -> int:
+        """Return the number of active forecasts."""
+        return len(self.forecasts)
+
+    @property
+    def active_forecast_ids(self) -> tuple[str, ...]:
+        """Return all active forecast ids in deterministic order."""
+        return tuple(forecast.id for forecast in self.forecasts if forecast.id)
+
+    @property
+    def local_warning(self) -> EstofexLocalWarning:
+        """Combine local warnings across all active forecasts."""
+        matching = [
+            forecast for forecast in self.forecasts if forecast.local_warning.active
+        ]
+        if not matching:
+            return EstofexLocalWarning()
+
+        best = max(
+            matching,
+            key=lambda forecast: (
+                forecast.local_warning.level_number,
+                len(forecast.local_warning.hazards),
+            ),
+        )
+        hazards: dict[str, EstofexHazard] = {}
+        for forecast in matching:
+            for hazard in forecast.local_warning.hazards:
+                hazards.setdefault(hazard.type, hazard)
+
+        return EstofexLocalWarning(
+            active=True,
+            level=best.local_warning.level,
+            hazards=tuple(hazards.values()),
+            polygon=best.local_warning.polygon,
+            matching_forecast_ids=tuple(
+                forecast.id for forecast in matching if forecast.id
+            ),
+        )
+
+    @property
+    def thunderstorm_forecasts(self) -> tuple[EstofexForecast, ...]:
+        """Return locally matching level 1, 2, or 3 forecasts."""
+        return tuple(
+            forecast
+            for forecast in self.forecasts
+            if forecast.local_warning.active
+            and forecast.local_warning.level_number in {1, 2, 3}
+        )
+
+    @property
+    def thunderstorm_risk(self) -> bool:
+        """Return whether any active forecast has local convective risk."""
+        return bool(self.thunderstorm_forecasts)
+
+    @property
+    def thunderstorm_hazards(self) -> tuple[EstofexHazard, ...]:
+        """Return de-duplicated hazards from matching convective forecasts."""
+        hazards: dict[str, EstofexHazard] = {}
+        for forecast in self.thunderstorm_forecasts:
+            for hazard in forecast.local_warning.hazards:
+                hazards.setdefault(hazard.type, hazard)
+        return tuple(hazards.values())
+
+    @property
+    def highest_thunderstorm_level(self) -> str | None:
+        """Return the highest local convective level across active forecasts."""
+        matching = self.thunderstorm_forecasts
+        if not matching:
+            return None
+        return max(
+            matching,
+            key=lambda forecast: forecast.local_warning.level_number,
+        ).local_warning.level
 
 
 def _highest_level(polygons: tuple[EstofexPolygon, ...]) -> str | None:
@@ -254,9 +420,22 @@ def _as_utc(value: datetime) -> datetime:
 
 def _level_sort_key(level: str | None) -> int:
     """Sort Level 1, Level 2, Level 3 in natural order."""
+    return _level_number(level)
+
+
+def _level_number(level: str | None) -> int:
+    """Extract a numeric ESTOFEX level from a normalized label."""
     if not level:
         return 0
-    try:
-        return int(level.split()[1])
-    except (IndexError, ValueError):
-        return 0
+    match = re.search(r"\b([123])\b", level)
+    return int(match.group(1)) if match else 0
+
+
+def _forecast_sort_key(forecast: EstofexForecast) -> tuple[datetime, str]:
+    """Return a stable newest-first sort key for a forecast."""
+    issued_at = (
+        _as_utc(forecast.issued_at)
+        if forecast.issued_at
+        else datetime.min.replace(tzinfo=UTC)
+    )
+    return issued_at, forecast.id or ""

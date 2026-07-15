@@ -24,7 +24,7 @@ def test_manifest_release_metadata() -> None:
 
     assert manifest["domain"] == DOMAIN
     assert manifest["name"] == "ESTOFEX"
-    assert manifest["version"] == "0.4.0"
+    assert manifest["version"] == "0.5.0"
     assert manifest["documentation"] == REPOSITORY_URL
     assert manifest["issue_tracker"] == f"{REPOSITORY_URL}/issues"
     assert manifest["codeowners"] == ["@MysterX83"]
@@ -50,6 +50,7 @@ def test_translation_keys_match_entities() -> None:
     expected = {
         "binary_sensor": {
             "local_warning",
+            "thunderstorm_risk",
             "forecast_changed",
             "large_hail",
             "severe_wind",
@@ -61,6 +62,7 @@ def test_translation_keys_match_entities() -> None:
         "camera": {"map"},
         "sensor": {
             "forecast_id",
+            "active_forecasts",
             "issued_at",
             "valid_until",
             "forecast_number",

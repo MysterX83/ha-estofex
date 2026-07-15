@@ -23,12 +23,29 @@ async def async_get_config_entry_diagnostics(
     if coordinator is None:
         return {"loaded": False}
 
-    forecast = coordinator.data
+    data = coordinator.data
+    forecast = data.primary_forecast if data else None
     return {
         "loaded": True,
         "status": coordinator.status,
         "forecast_id": forecast.id if forecast else None,
         "forecast_number": forecast.forecast_number if forecast else None,
+        "active_forecast_count": data.forecast_count if data else 0,
+        "active_forecast_ids": list(data.active_forecast_ids) if data else [],
+        "primary_forecast_id": data.primary_forecast_id if data else None,
+        "forecasts": [
+            {
+                "forecast_id": item.id,
+                "forecast_number": item.forecast_number,
+                "issued_at": _format_datetime(item.issued_at),
+                "valid_until": _format_datetime(item.valid_until),
+                "map_available": item.map_available,
+                "polygon_count": len(item.polygons),
+                "hazards": [hazard.type for hazard in item.hazards],
+                "local_warning": item.local_warning.active,
+            }
+            for item in (data.forecasts if data else ())
+        ],
         "issued_at": _format_datetime(forecast.issued_at if forecast else None),
         "valid_from": _format_datetime(forecast.valid_from if forecast else None),
         "valid_until": _format_datetime(forecast.valid_until if forecast else None),
@@ -44,9 +61,12 @@ async def async_get_config_entry_diagnostics(
         "last_download_size": coordinator.last_download_size,
         "image_downloaded": coordinator.image_downloaded,
         "map_available": forecast.map_available if forecast else False,
+        "active_map_cache_files": coordinator.active_map_cache_count,
         "polygons": len(forecast.polygons) if forecast else 0,
         "hazards": [hazard.type for hazard in forecast.hazards] if forecast else [],
         "local_warning": (forecast.local_warning.active if forecast else False),
+        "combined_local_warning": data.local_warning.active if data else False,
+        "thunderstorm_risk": data.thunderstorm_risk if data else False,
         "parser_version": (forecast.diagnostics.parser_version if forecast else None),
         "last_error": coordinator.last_error,
     }

@@ -15,6 +15,9 @@
       "local_warning": {
         "name": "Lokale waarschuwing"
       },
+      "thunderstorm_risk": {
+        "name": "Kans op onweer"
+      },
       "forecast_changed": {
         "name": "Verwachting gewijzigd"
       },
@@ -47,6 +50,9 @@
     "sensor": {
       "forecast_id": {
         "name": "Verwachting-ID"
+      },
+      "active_forecasts": {
+        "name": "Actieve verwachtingen"
       },
       "issued_at": {
         "name": "Uitgegeven om"

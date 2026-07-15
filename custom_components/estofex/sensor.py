@@ -13,11 +13,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import EstofexCoordinator
 from .entity import EstofexEntity
+from .models import EstofexForecast
 
 
 def _format_timestamp(value: datetime | None) -> str | None:
     """Format a timestamp for entity attributes."""
     return value.isoformat() if value else None
+
+
+def _primary(coordinator: EstofexCoordinator) -> EstofexForecast | None:
+    """Return the primary forecast for backwards-compatible sensors."""
+    return coordinator.primary_forecast
 
 
 async def async_setup_entry(
@@ -31,6 +37,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             EstofexForecastIdSensor(coordinator),
+            EstofexActiveForecastsSensor(coordinator),
             EstofexIssuedAtSensor(coordinator),
             EstofexValidUntilSensor(coordinator),
             EstofexForecastNumberSensor(coordinator),
@@ -61,18 +68,62 @@ class EstofexForecastIdSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return forecast id."""
-        return self.coordinator.data.fcstfile if self.coordinator.data else None
+        forecast = _primary(self.coordinator)
+        return forecast.fcstfile if forecast else None
 
     @property
     def extra_state_attributes(self) -> dict[str, str | bool | None]:
         """Return forecast attributes."""
-        if not self.coordinator.data:
+        forecast = _primary(self.coordinator)
+        if not forecast:
             return {}
         return {
-            "image_url": self.coordinator.data.image_url,
-            "local_image_url": self.coordinator.data.local_image_url,
-            "changed": self.coordinator.data.changed,
-            "map_available": self.coordinator.data.map_available,
+            "image_url": forecast.image_url,
+            "local_image_url": forecast.local_image_url,
+            "changed": bool(self.coordinator.data and self.coordinator.data.changed),
+            "map_available": forecast.map_available,
+        }
+
+
+class EstofexActiveForecastsSensor(EstofexEntity, SensorEntity):
+    """Number and compact metadata of all active forecasts."""
+
+    _attr_name = "Active Forecasts"
+    _attr_unique_id = "estofex_active_forecasts"
+    _attr_translation_key = "active_forecasts"
+    _attr_icon = "mdi:weather-lightning-rainy"
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of active forecasts."""
+        return self.coordinator.data.forecast_count if self.coordinator.data else 0
+
+    @property
+    def extra_state_attributes(self):
+        """Return compact active forecast metadata only."""
+        data = self.coordinator.data
+        if not data:
+            return {
+                "forecast_ids": [],
+                "forecast_count": 0,
+                "primary_forecast_id": None,
+                "forecasts": [],
+            }
+        return {
+            "forecast_ids": list(data.active_forecast_ids),
+            "forecast_count": data.forecast_count,
+            "primary_forecast_id": data.primary_forecast_id,
+            "forecasts": [
+                {
+                    "forecast_id": forecast.id,
+                    "forecast_number": forecast.forecast_number,
+                    "issued_at": _format_timestamp(forecast.issued_at),
+                    "valid_until": _format_timestamp(forecast.valid_until),
+                    "map_url": forecast.local_map_url,
+                    "is_primary": forecast.id == data.primary_forecast_id,
+                }
+                for forecast in data.forecasts
+            ],
         }
 
 
@@ -87,7 +138,8 @@ class EstofexIssuedAtSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self):
         """Return issued timestamp."""
-        return self.coordinator.data.issued_at if self.coordinator.data else None
+        forecast = _primary(self.coordinator)
+        return forecast.issued_at if forecast else None
 
 
 class EstofexValidUntilSensor(EstofexEntity, SensorEntity):
@@ -101,7 +153,8 @@ class EstofexValidUntilSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self):
         """Return valid-until timestamp."""
-        return self.coordinator.data.valid_until if self.coordinator.data else None
+        forecast = _primary(self.coordinator)
+        return forecast.valid_until if forecast else None
 
 
 class EstofexForecastNumberSensor(EstofexEntity, SensorEntity):
@@ -115,7 +168,8 @@ class EstofexForecastNumberSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return forecast number."""
-        return self.coordinator.data.forecast_number if self.coordinator.data else None
+        forecast = _primary(self.coordinator)
+        return forecast.forecast_number if forecast else None
 
 
 class EstofexMapUrlSensor(EstofexEntity, SensorEntity):
@@ -129,7 +183,8 @@ class EstofexMapUrlSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return local image url."""
-        return self.coordinator.data.local_image_url if self.coordinator.data else None
+        forecast = _primary(self.coordinator)
+        return forecast.local_image_url if forecast else None
 
 
 class EstofexDiscussionSensor(EstofexEntity, SensorEntity):
@@ -143,7 +198,7 @@ class EstofexDiscussionSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Return a short discussion availability state."""
-        data = self.coordinator.data
+        data = _primary(self.coordinator)
         if not data or not data.fcstfile:
             return "No forecast"
         if data.discussion_original:
@@ -153,18 +208,21 @@ class EstofexDiscussionSensor(EstofexEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """Return parsed forecast discussion attributes."""
-        data = self.coordinator.data
+        data = _primary(self.coordinator)
         if not data:
             return {}
         return {
+            "discussion": data.discussion_original,
+            "discussion_markdown": data.discussion_markdown,
+            "text": data.discussion_original,
             "original_text": data.discussion_original,
-            "level_texts": list(data.level_texts),
             "forecaster": data.forecaster,
             "issued_at": _format_timestamp(data.issued_at),
-            "valid_from": _format_timestamp(data.valid_from),
             "valid_until": _format_timestamp(data.valid_until),
             "forecast_number": data.forecast_number,
             "forecast_id": data.forecast_id,
+            "source_url": data.source_url,
+            "character_count": len(data.discussion_original or ""),
         }
 
 
@@ -180,23 +238,27 @@ class EstofexLocalLevelSensor(EstofexEntity, SensorEntity):
     def native_value(self) -> str:
         """Return the highest local warning level."""
         data = self.coordinator.data
-        if not data or not data.id:
+        if not data or not data.primary_forecast:
             return "None"
-        return data.local_level or "None"
+        return data.local_warning.level or "None"
 
     @property
     def extra_state_attributes(self):
         """Return local level context."""
         data = self.coordinator.data
+        forecast = _primary(self.coordinator)
         if not data:
             return {}
         return {
-            "forecast_id": data.id,
-            "highest_forecast_level": data.highest_level,
+            "forecast_id": forecast.id if forecast else None,
+            "matching_forecast_ids": list(data.local_warning.matching_forecast_ids),
+            "highest_forecast_level": forecast.highest_level if forecast else None,
             "local_warning": data.local_warning.active,
             "hazards": data.local_warning.hazard_labels,
-            "issued_at": _format_timestamp(data.issued_at),
-            "valid_until": _format_timestamp(data.valid_until),
+            "issued_at": _format_timestamp(forecast.issued_at if forecast else None),
+            "valid_until": _format_timestamp(
+                forecast.valid_until if forecast else None
+            ),
         }
 
 
@@ -212,22 +274,29 @@ class EstofexLocalSummarySensor(EstofexEntity, SensorEntity):
     def native_value(self) -> str:
         """Return a concise local forecast summary."""
         data = self.coordinator.data
-        if not data or not data.id:
+        if not data or not data.primary_forecast:
             return "No forecast"
-        return data.local_summary()
+        warning = data.local_warning
+        if not warning.active:
+            return "No local ESTOFEX warning."
+        return warning.level or "Thunderstorm area"
 
     @property
     def extra_state_attributes(self):
         """Return local summary context."""
         data = self.coordinator.data
+        forecast = _primary(self.coordinator)
         if not data:
             return {}
         return {
-            "forecast_id": data.id,
-            "level": data.local_level,
+            "forecast_id": forecast.id if forecast else None,
+            "matching_forecast_ids": list(data.local_warning.matching_forecast_ids),
+            "level": data.local_warning.level,
             "hazards": data.local_warning.hazard_labels,
-            "valid_until": _format_timestamp(data.valid_until),
-            "summary_nl_available": bool(data.summary_nl),
+            "valid_until": _format_timestamp(
+                forecast.valid_until if forecast else None
+            ),
+            "summary_nl_available": bool(forecast and forecast.summary_nl),
         }
 
 
@@ -242,7 +311,7 @@ class EstofexSummaryNlSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Return a short Dutch summary availability state."""
-        data = self.coordinator.data
+        data = _primary(self.coordinator)
         if not data or not data.fcstfile:
             return "No forecast"
         if data.summary_nl:
@@ -252,7 +321,7 @@ class EstofexSummaryNlSensor(EstofexEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """Return Dutch summary attributes."""
-        data = self.coordinator.data
+        data = _primary(self.coordinator)
         if not data:
             return {}
         return {
@@ -275,7 +344,7 @@ class EstofexDiscussionNlSensor(EstofexEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Return a short Dutch discussion availability state."""
-        data = self.coordinator.data
+        data = _primary(self.coordinator)
         if not data or not data.fcstfile:
             return "No forecast"
         if data.discussion_nl:
@@ -285,7 +354,7 @@ class EstofexDiscussionNlSensor(EstofexEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """Return Dutch discussion attributes."""
-        data = self.coordinator.data
+        data = _primary(self.coordinator)
         if not data:
             return {}
         return {
@@ -423,15 +492,15 @@ class EstofexStatusSensor(EstofexEntity, SensorEntity):
             "forecast_http_status": self.coordinator.last_forecast_http_status,
             "image_http_status": self.coordinator.last_image_http_status,
             "forecast_age_seconds": (
-                self.coordinator.data.diagnostics.forecast_age_seconds
-                if self.coordinator.data
+                self.coordinator.primary_forecast.diagnostics.forecast_age_seconds
+                if self.coordinator.primary_forecast
                 else None
             ),
             "last_update_duration": self.coordinator.last_update_duration,
             "last_download_size": self.coordinator.last_download_size,
             "parser_version": (
-                self.coordinator.data.diagnostics.parser_version
-                if self.coordinator.data
+                self.coordinator.primary_forecast.diagnostics.parser_version
+                if self.coordinator.primary_forecast
                 else None
             ),
             "forecast_source_url": self.coordinator.forecast_source_url,

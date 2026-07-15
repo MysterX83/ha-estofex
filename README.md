@@ -1,12 +1,12 @@
 # ESTOFEX for Home Assistant
 
-Monitor ESTOFEX convective forecasts in Home Assistant, display the latest forecast map, and expose structured warning information for dashboards, automations, and notifications.
+Monitor active ESTOFEX convective forecasts in Home Assistant, display their forecast maps, and expose structured warning information for dashboards, automations, and notifications.
 
 ESTOFEX is the European Storm Forecast Experiment. This custom integration polls public ESTOFEX forecast data, caches the current map locally, parses forecast metadata and discussion text, and evaluates whether the configured Home Assistant location is inside an ESTOFEX warning polygon.
 
 > This integration is not affiliated with ESTOFEX. Forecast data is provided by ESTOFEX.
 
-The current release is [v0.4.0](https://github.com/MysterX83/ha-estofex/releases/tag/v0.4.0).
+The current integration version is `0.5.0`.
 
 ## Screenshots
 
@@ -19,15 +19,19 @@ The current release is [v0.4.0](https://github.com/MysterX83/ha-estofex/releases
 - Setup through the Home Assistant UI
 - Hourly polling through `DataUpdateCoordinator`
 - Manual refresh button
-- Latest ESTOFEX forecast map as a camera entity
+- All simultaneously active ESTOFEX forecasts, sorted newest first
+- Primary (newest active) ESTOFEX forecast map as the existing camera entity
+- Dynamic camera entity for every active forecast
 - Locally cached map at `/local/estofex/latest.png`
+- Separate, safely named cache file for every active forecast map
 - Built-in placeholder map when there is no active forecast
 - Forecast metadata sensors
-- Original ESTOFEX discussion parsing
-- Dutch translation and summary hooks (no provider is included in v0.4.0)
+- Full, sanitized ESTOFEX discussion text and Markdown attributes
+- Dutch translation and summary hooks (no provider is included)
 - Polygon parsing from ESTOFEX XML source
 - Local warning detection using Home Assistant latitude/longitude
 - Hazard binary sensors for hail, wind, rain, tornado, and flash flooding
+- Combined local thunderstorm-risk binary sensor for ESTOFEX levels 1–3
 - Home Assistant events for forecast and local warning transitions
 - Diagnostics support
 
@@ -93,20 +97,24 @@ Entity IDs can vary if Home Assistant has already created entities with the same
 
 | Entity | Description |
 | --- | --- |
-| `camera.estofex_map` | Latest cached ESTOFEX forecast map |
+| `camera.estofex_map` | Backwards-compatible map of the primary (newest active) forecast |
+| `camera.estofex_map_forecast_*` | Dynamic map for one active forecast; the final entity ID is assigned by Home Assistant |
+
+When forecasts overlap, all remain available until their validity ends. The newest active forecast by issue time is the **primary forecast**. Existing forecast sensors and `camera.estofex_map` continue to represent this primary forecast.
 
 ### Sensors
 
 | Entity | Description |
 | --- | --- |
 | `sensor.estofex_forecast_id` | Latest ESTOFEX forecast file ID |
+| `sensor.estofex_active_forecasts` | Count and compact metadata for all active forecasts |
 | `sensor.estofex_issued_at` | Forecast issue timestamp |
 | `sensor.estofex_valid_until` | Forecast valid-until timestamp |
 | `sensor.estofex_forecast_number` | ESTOFEX forecast number |
 | `sensor.estofex_map_url` | Local cached map URL |
 | `sensor.estofex_local_level` | Highest warning level for the Home Assistant location |
 | `sensor.estofex_local_summary` | Concise local warning summary |
-| `sensor.estofex_discussion` | Original ESTOFEX discussion state with text attributes |
+| `sensor.estofex_discussion` | Short availability state with full primary discussion in `discussion` and `discussion_markdown` attributes |
 | `sensor.estofex_summary_nl` | Dutch summary availability and text |
 | `sensor.estofex_discussion_nl` | Dutch translation availability and text |
 | `sensor.estofex_status` | Update status |
@@ -121,6 +129,7 @@ Entity IDs can vary if Home Assistant has already created entities with the same
 | Entity | Description |
 | --- | --- |
 | `binary_sensor.estofex_local_warning` | On when Home Assistant location is inside a parsed ESTOFEX polygon |
+| `binary_sensor.estofex_thunderstorm_risk` | On when the location is inside a level 1, 2, or 3 polygon from any active forecast |
 | `binary_sensor.estofex_forecast_changed` | On immediately after a new forecast is detected |
 | `binary_sensor.estofex_large_hail` | Local warning includes large hail |
 | `binary_sensor.estofex_severe_wind` | Local warning includes severe wind gusts |
@@ -140,7 +149,7 @@ Entity IDs can vary if Home Assistant has already created entities with the same
 | --- | --- |
 | `OK` | Forecast data is available |
 | `Updating` | Coordinator is currently refreshing |
-| `No forecast` | ESTOFEX is reachable, but no active storm forecast was found, or the latest listed forecast has expired |
+| `No forecast` | ESTOFEX is reachable, but no listed storm forecast is currently active |
 | `Offline` | ESTOFEX is temporarily unreachable; previous data is preserved when available |
 | `Error` | Unexpected integration error |
 
@@ -150,12 +159,16 @@ The integration fires these Home Assistant events:
 
 ### `estofex_forecast_updated`
 
-Fired when a new ESTOFEX forecast ID is detected.
+Fired only when the active forecast set or primary forecast changes. It is not fired on unchanged polling cycles.
 
 Payload:
 
 ```yaml
 forecast_id: string
+active_forecast_ids: list
+added_forecast_ids: list
+removed_forecast_ids: list
+primary_forecast_id: string | null
 issued_at: string | null
 valid_until: string | null
 levels_present: list
@@ -199,6 +212,7 @@ show_state: false
 type: entities
 entities:
   - binary_sensor.estofex_local_warning
+  - binary_sensor.estofex_thunderstorm_risk
   - sensor.estofex_local_level
   - sensor.estofex_local_summary
   - binary_sensor.estofex_large_hail
@@ -207,6 +221,21 @@ entities:
   - binary_sensor.estofex_tornado
   - binary_sensor.estofex_flash_flood
 ```
+
+### Forecast Discussion Markdown Card
+
+The sensor state intentionally remains `Available`, `Unavailable`, or `No forecast`, because Home Assistant states are not suitable for long text. Display the complete sanitized primary-forecast discussion with:
+
+```yaml
+type: markdown
+title: ESTOFEX Discussion
+content: >-
+  {{ state_attr('sensor.estofex_discussion', 'discussion_markdown')
+     or state_attr('sensor.estofex_discussion', 'discussion')
+     or 'No discussion available.' }}
+```
+
+`text` and `original_text` remain available as compatibility aliases, but new dashboards should use `discussion` or `discussion_markdown`.
 
 ### Diagnostics Entities
 
@@ -237,17 +266,19 @@ entities:
 
 ### Forecast discussion is available but Dutch sensors are unavailable
 
-This is expected. The Dutch translation and summary hooks are present, but no external AI provider is included or required in v0.4.0.
+This is expected. The Dutch translation and summary hooks are present, but no external provider is included or required in v0.5.0.
 
 ### Manual update does not appear to download a new map
 
-The integration only downloads the map when the ESTOFEX forecast ID changes, or when the cached map is missing. This avoids unnecessary network traffic.
+The integration downloads an active forecast map only when its individual cache file is missing. The primary cached map is mirrored to `/local/estofex/latest.png` only when its content changes.
 
 ## Diagnostics
 
 Home Assistant diagnostics include:
 
-- forecast ID
+- active forecast count and IDs
+- primary forecast ID
+- compact per-forecast metadata
 - forecast number
 - status
 - timestamps
@@ -259,6 +290,8 @@ Home Assistant diagnostics include:
 - polygon count
 - parsed hazard types
 - local warning state
+- active map-cache file count
+- combined thunderstorm-risk state
 
 Diagnostics do not include credentials, API keys, or secrets. The integration currently has no user-provided credentials.
 
@@ -274,6 +307,7 @@ The integration is split into small modules:
 | `parser.py` | Forecast list, XML, HTML, discussion, level, polygon, and hazard parsing |
 | `models.py` | Dataclasses for forecasts, hazards, polygons, discussions, diagnostics, and update results |
 | `geometry.py` | Point-in-polygon and local warning evaluation |
+| `map_cache.py` | Safe map filenames and integration-owned cache cleanup |
 | `coordinator.py` | Refresh orchestration, cache policy, status, events, and diagnostics state |
 | `entity.py` | Shared Home Assistant entity base |
 | `sensor.py` | Sensor entities |
@@ -289,28 +323,23 @@ Entities do not make HTTP requests and do not parse ESTOFEX data. They only read
 ### Update Flow
 
 1. The coordinator fetches the ESTOFEX forecast list every hour, or when the update button is pressed.
-2. If no active forecast is listed, or the listed forecast has expired, the cached map is removed and the camera serves the bundled no-forecast placeholder.
-3. If the forecast ID is unchanged, parsed data is reused and the cached map is only re-downloaded when missing.
-4. If a new forecast is found, the XML source is parsed, the map is downloaded, local warning polygons are evaluated, and transition events are fired.
-5. If ESTOFEX is temporarily unreachable, the previous valid forecast is preserved when available and the status changes to `Offline`.
+2. It selects every forecast for which `issued_at <= now < valid_until`, fetches new forecast sources, and reuses unchanged parsed data and maps.
+3. Parsing, discussion, and map failures are isolated per forecast; other usable active forecasts continue updating.
+4. Local polygon warnings and hazards are evaluated per forecast and then combined for warning entities and events.
+5. Inactive integration-owned forecast maps are removed, while the primary map remains mirrored at `/local/estofex/latest.png`.
+6. If no forecast is active, all integration-owned active maps are cleared and the primary camera serves the bundled placeholder.
+7. If ESTOFEX is temporarily unreachable, previous forecast data and map files are preserved and the status changes to `Offline`.
 
 ## Known Limitations
 
-- ESTOFEX forecasts are not official weather warnings.
 - Only one config entry is supported.
-- Dutch translation and summary sensors remain unavailable because v0.4.0 does not include a provider.
-- Mesoscale Discussions, LightningMaps, KNMI, DWD, ESWD, and a custom Lovelace card are not included in v0.4.0.
+- Dutch translation and summary sensors remain unavailable because v0.5.0 does not include a provider.
+- Mesoscale Discussions, LightningMaps, KNMI, DWD, ESWD, and a custom Lovelace card are not included in v0.5.0.
 - Hazard-to-region mapping is best-effort and depends on the structure of the public ESTOFEX bulletin text.
+- ESTOFEX is a convective forecast product, not an official weather warning. Use official national meteorological services for operational warnings.
+- The thunderstorm-risk sensor reports whether a level 1–3 polygon covers the configured location. It does not provide or invent an exact probability percentage.
 
 ## Roadmap
-
-### v0.5
-
-- Optional AI-backed Dutch summaries
-- Optional AI-backed Dutch discussion translation
-- Mesoscale Discussion parsing
-- Improved hazard-to-region mapping
-- More complete tests with mocked ESTOFEX responses
 
 ### Later
 
@@ -326,7 +355,7 @@ Entities do not make HTTP requests and do not parse ESTOFEX data. They only read
 
 ### Is AI required?
 
-No. The integration works without AI and makes no AI network calls in v0.4.0.
+No. The integration works without AI and makes no AI network calls in v0.5.0.
 
 ### Does this replace official weather warnings?
 
