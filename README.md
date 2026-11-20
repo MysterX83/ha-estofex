@@ -8,6 +8,12 @@ ESTOFEX is the European Storm Forecast Experiment. This custom integration polls
 
 The current integration version is `0.5.0`.
 
+## Documentation
+
+See the [documentation index](docs/README.md) for layered high-level design and
+low-level implementation documentation. Start with the [system overview](docs/high-level/overview.md)
+or go directly to [runtime behavior](docs/low-level/runtime.md).
+
 ## Screenshots
 
 ### Home Assistant dashboard

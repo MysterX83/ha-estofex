@@ -2,6 +2,11 @@
 
 Thanks for helping improve ESTOFEX for Home Assistant.
 
+Read the [architecture](docs/high-level/architecture.md) before changing module
+boundaries and the [development and testing guide](docs/low-level/development.md)
+for test coverage and environment setup. Update relevant documentation alongside
+behavior changes.
+
 ## Development
 
 1. Fork the repository.
