@@ -49,8 +49,10 @@ def point_in_polygon(
     if len(coordinates) < 3:
         return False
 
-    vertices = _normalize_longitudes(longitude, coordinates)
+    vertices = _normalize_longitudes(coordinates)
     point_x = _normalize_longitude(longitude)
+    center_x = (min(x for x, _ in vertices) + max(x for x, _ in vertices)) / 2
+    point_x += 360 * round((center_x - point_x) / 360)
     point_y = latitude
 
     inside = False
@@ -92,21 +94,15 @@ def _unique_hazards(
 
 
 def _normalize_longitudes(
-    point_longitude: float,
     coordinates: tuple[tuple[float, float], ...],
 ) -> list[tuple[float, float]]:
     """Normalize longitudes to keep dateline-crossing polygons coherent."""
-    longitudes = [_normalize_longitude(lon) for _, lon in coordinates]
-    crosses_dateline = max(longitudes) - min(longitudes) > 180
-    point_lon = _normalize_longitude(point_longitude)
-
     vertices: list[tuple[float, float]] = []
     for lat, lon in coordinates:
         normalized_lon = _normalize_longitude(lon)
-        if crosses_dateline and normalized_lon - point_lon > 180:
-            normalized_lon -= 360
-        elif crosses_dateline and point_lon - normalized_lon > 180:
-            normalized_lon += 360
+        if vertices:
+            # Unwrap consecutive edges independently of the query point.
+            normalized_lon += 360 * round((vertices[-1][0] - normalized_lon) / 360)
         vertices.append((normalized_lon, lat))
     return vertices
 

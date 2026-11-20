@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from html import unescape
 from html.parser import HTMLParser
 
+from .exceptions import EstofexParseError
 from .models import (
     HAZARD_EXCESSIVE_RAIN,
     HAZARD_FLASH_FLOOD,
@@ -182,6 +183,16 @@ def parse_forecast_entries(html: str) -> tuple[EstofexForecastReference, ...]:
                 valid_until=_parse_fcstfile_valid_until(forecast_id),
             )
         )
+    if not entries:
+        # A real empty archive still has its table headings. An error page or
+        # truncated response is not evidence that warnings have been cleared.
+        visible = _flatten(_text_fallback(html)).lower()
+        if not (
+            re.search(r"<table\b", html, re.IGNORECASE)
+            and re.search(r"</table\s*>", html, re.IGNORECASE)
+            and "forecast threat level period forecaster" in visible
+        ):
+            raise EstofexParseError("Unrecognized ESTOFEX forecast list")
     return tuple(entries)
 
 
@@ -202,7 +213,12 @@ def parse_estofex_forecast(
     source_url: str | None = None,
 ) -> EstofexForecast:
     """Parse an ESTOFEX XML-ish or HTML source into a forecast model."""
-    if "<forecast" in source.lower() and "<area" in source.lower():
+    if re.search(r"<forecast\b", source, re.IGNORECASE):
+        if not re.search(r"</forecast\s*>", source, re.IGNORECASE) or not (
+            _parse_compact_datetime(_value_attr(source, "expiry_time"), False)
+            and _parse_compact_datetime(_value_attr(source, "issue_time"), True)
+        ):
+            raise EstofexParseError("Incomplete ESTOFEX forecast source")
         return _parse_xmlish_forecast(
             source,
             fcstfile,
@@ -288,6 +304,8 @@ def _parse_html_forecast(
 
     valid_from, valid_until = _parse_valid_period(metadata)
     issued_at = _parse_issued_at(metadata)
+    if not (valid_from and valid_until and issued_at):
+        raise EstofexParseError("Unrecognized ESTOFEX forecast source")
 
     return EstofexForecast(
         id=fcstfile,

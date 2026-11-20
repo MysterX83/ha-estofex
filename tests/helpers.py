@@ -36,7 +36,7 @@ def _ensure_package() -> None:
     package = sys.modules.get(PACKAGE_NAME)
     if package is None:
         package = types.ModuleType(PACKAGE_NAME)
-        package.__path__ = []  # type: ignore[attr-defined]
+        package.__path__ = [str(ROOT / "custom_components" / "estofex")]
         sys.modules[PACKAGE_NAME] = package
 
 

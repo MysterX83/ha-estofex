@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from .helpers import install_homeassistant_stubs, load_estofex_module
 
 install_homeassistant_stubs()
@@ -83,6 +85,11 @@ class FakeApi:
             raise self.list_error
         body = "".join(
             f'<a href="?fcstfile={item}">forecast</a>' for item in self.forecast_ids
+        )
+        body = (
+            "<table><tr><td>forecast</td><td>threat level</td><td>period</td><td>forecaster</td></tr>"
+            + body
+            + "</table>"
         )
         return SimpleNamespace(body=body, status=200)
 
@@ -255,3 +262,56 @@ def test_warning_is_not_cleared_while_another_forecast_still_matches(tmp_path) -
     coordinator._fire_transition_events(previous, current)
 
     assert not coordinator.hass.bus.events
+
+
+@pytest.mark.parametrize("expired", [False, True])
+def test_invalid_list_preserves_only_unexpired_warnings(tmp_path, expired) -> None:
+    async def scenario():
+        api = FakeApi((NEWER_ID,))
+        coordinator = _coordinator(tmp_path, api)
+        coordinator.data = await coordinator._async_update_data()
+        coordinator.hass.bus.events.clear()
+        if expired:
+            coordinator._utcnow = lambda: datetime(2026, 7, 2, 12, tzinfo=UTC)
+
+        async def error_page():
+            return SimpleNamespace(
+                body="<html>Temporarily unavailable</html>", status=200
+            )
+
+        api.async_fetch_forecast_list = error_page
+        data = await coordinator._async_update_data()
+        assert coordinator.status == coordinator_module.STATUS_ERROR
+        assert data.forecast_count == (0 if expired else 1)
+        assert data.local_warning.active is not expired
+        assert coordinator._latest_image_path().exists()
+        assert [event for event, _ in coordinator.hass.bus.events] == (
+            [coordinator_module.EVENT_WARNING_CLEARED] if expired else []
+        )
+
+    asyncio.run(scenario())
+
+
+def test_bad_source_is_retried_after_recovery(tmp_path) -> None:
+    async def scenario():
+        api = FakeApi((NEWER_ID,))
+        coordinator = _coordinator(tmp_path, api)
+        original = api.async_fetch_forecast_source
+
+        async def error_page(forecast_id):
+            return SimpleNamespace(
+                body="<html>Temporarily unavailable</html>", status=200, url="test"
+            )
+
+        api.async_fetch_forecast_source = error_page
+        coordinator.data = await coordinator._async_update_data()
+        assert coordinator.status == coordinator_module.STATUS_ERROR
+        assert not coordinator.data.forecasts
+        assert not api.map_calls
+        api.async_fetch_forecast_source = original
+        data = await coordinator._async_update_data()
+        assert coordinator.status == coordinator_module.STATUS_OK
+        assert data.local_warning.active
+        assert data.forecast_count == 1
+
+    asyncio.run(scenario())

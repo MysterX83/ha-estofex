@@ -419,7 +419,8 @@ class EstofexCoordinator(DataUpdateCoordinator[EstofexUpdateData]):
         self.last_error = str(err)
         self._set_status(STATUS_ERROR)
         _LOGGER.error("Error while updating ESTOFEX: %s", err)
-        if previous:
+        previous = self._active_previous(previous, self._utcnow())
+        if previous.forecasts:
             return replace(
                 previous,
                 added_forecast_ids=(),

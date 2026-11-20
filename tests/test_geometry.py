@@ -2,10 +2,38 @@
 
 from __future__ import annotations
 
+import pytest
+
 from .helpers import load_estofex_module
 
 models = load_estofex_module("models")
 geometry = load_estofex_module("geometry")
+
+
+@pytest.mark.parametrize(
+    "longitude, expected",
+    [
+        (0, False),
+        (90, False),
+        (-90, False),
+        (169, False),
+        (-169, False),
+        (175, True),
+        (-175, True),
+        (180, True),
+        (-180, True),
+        (170, True),
+        (-170, True),
+        (535, True),
+    ],
+)
+@pytest.mark.parametrize("reverse", [False, True])
+def test_dateline_polygon(longitude, expected, reverse) -> None:
+    coordinates = ((-10, 170), (-10, -170), (10, -170), (10, 170))
+    if reverse:
+        coordinates = tuple(reversed(coordinates))
+    assert geometry.point_in_polygon(0, longitude, coordinates) is expected
+    assert not geometry.point_in_polygon(11, longitude, coordinates)
 
 
 def test_point_in_polygon_inside() -> None:

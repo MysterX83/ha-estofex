@@ -1,0 +1,5 @@
+# Home Assistant 2024.11.3 on Python 3.12; kept separate from stub unit tests.
+pytest-homeassistant-custom-component==0.13.184
+# Older ACME/aiodns consumers require the APIs removed in newer major versions.
+josepy==1.14.0
+pycares==4.4.0

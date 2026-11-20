@@ -4,10 +4,58 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from .helpers import load_estofex_module
 
 load_estofex_module("models")
 parser = load_estofex_module("parser")
+
+
+@pytest.mark.parametrize(
+    "source", ["", "<html>Temporarily unavailable</html>", "<html>ESTOFEX</html>"]
+)
+def test_error_pages_are_not_empty_forecast_lists(source) -> None:
+    with pytest.raises(parser.EstofexParseError):
+        parser.parse_forecast_entries(source)
+
+
+def test_empty_archive_is_recognized() -> None:
+    source = "<table><tr><td>forecast</td><td>threat level</td><td>period</td><td>forecaster</td></tr></table>"
+    assert parser.parse_forecast_entries(source) == ()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "",
+        "<html>Temporarily unavailable</html>",
+        "<forecast><area></area></forecast>",
+        '<forecast><issue_time value="202607010600"/><expiry_time value="2026070206"/>',
+    ],
+)
+def test_invalid_source_cannot_borrow_validity_from_filename(source) -> None:
+    with pytest.raises(parser.EstofexParseError):
+        parser.parse_estofex_forecast(
+            source, "2026070206_202607010600_1_stormforecast.xml"
+        )
+
+
+def test_valid_xml_without_risk_areas() -> None:
+    source = '<forecast><issue_time value="202607010600"/><expiry_time value="2026070206"/><text>Severe storms unlikely.</text></forecast>'
+    forecast = parser.parse_estofex_forecast(
+        source, "2026070206_202607010600_0_stormforecast.xml"
+    )
+    assert not forecast.polygons
+    assert forecast.discussion == "Severe storms unlikely."
+
+
+def test_valid_html_discussion_fallback() -> None:
+    source = '<div class="title">Storm Forecast</div><p class="bulletin">Valid: Wed 01 Jul 2026 06:00 to Thu 02 Jul 2026 06:00 UTC<br>Issued: Wed 01 Jul 2026 06:00 UTC<br>Forecaster: TEST</p><p class="bulletin">DISCUSSION<br><br>Large hail possible.</p>'
+    forecast = parser.parse_estofex_forecast(
+        source, "2026070206_202607010600_1_stormforecast.xml"
+    )
+    assert forecast.discussion == "DISCUSSION\n\nLarge hail possible."
 
 
 def test_parse_latest_forecast_id() -> None:
